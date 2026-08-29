@@ -48,28 +48,57 @@ identically either way.
 
 ## How it decides
 
-It is not a static cheat sheet — it reacts to what has already happened.
+Not a static cheat sheet — it reacts to what has already happened.
 
-- **Value over replacement.** A player is worth what he beats the waiver wire by, not his
-  raw points. Baselines for this exact format: QB13, RB33, WR39, TE13 — the RB/WR
-  baselines run deep because two FLEX spots mean the league starts ~33 RBs and ~39 WRs.
-- **Roster need.** A third TE is worth nothing to you. The engine knows, and will not
-  recommend a player who can't crack your lineup.
-- **Pick timing.** It knows your slot, so it knows the gap to your next turn. If a guy is
-  85% likely to still be there in two rounds, it says wait and take the scarce player now.
-- **Tier cliffs.** Being told "only 1 left in RB Tier 3" is the whole game in the middle
-  rounds.
-- **Positional runs.** Flags when 4+ of the last 8 picks were one position, because that's
-  when a tier empties out under you.
-- **It will not strand you.** Escalating urgency as your remaining picks run down, plus
-  supply awareness — when the startable players at a spot you still need are nearly gone,
-  it stops telling you to wait. K and DEF are suppressed entirely until the last two rounds,
-  then forced.
+- **Format first.** Best ball and redraft are genuinely different engines, not a cosmetic
+  toggle. Set it in Setup; best ball is the default.
+- **Value over replacement**, with baselines set per format. Best ball rosters more WRs and
+  a real QB2, so its replacement levels sit deeper (QB14 / RB30 / WR48 / TE15) than
+  redraft's (QB13 / RB31 / WR42 / TE13).
+- **Spike-week value.** In best ball your auto-lineup banks a player's best weeks, so
+  variance is an asset. Boom rate (share of weeks finishing top-12 at the position),
+  ceiling and PPG are blended 45/25/30 and applied *within position*.
+- **Roster need.** A player who cannot crack your lineup scores zero and is never suggested.
+- **Pick timing.** It knows your slot, so it knows the gap to your next turn and how likely
+  each player is to survive it.
+- **Tier cliffs and positional runs**, flagged as they happen.
+- **It will not strand you.** Urgency escalates as picks run down, and once the startable
+  players at a spot you still need are nearly gone it stops saying wait. K and DEF are
+  suppressed until the last two rounds, then forced.
 
-Simulated across all 12 draft slots against roster-aware opponents: every slot finishes
-with a legal, complete 16-man roster and no empty starting spots.
+### The best-ball layer, and where to distrust it
 
----
+Boom rates come from nflverse weekly stats for 2024-25, blended 70/30 toward 2025.
+
+The adjustment moves a player in **rank space** — it reorders him within his position and
+then hands out that position's existing points curve in the new order. Scaling his points
+directly would be worth ±35% of 300 for an elite back but only ±35% of 100 for a bench one,
+which inflates the top of every position and destroys the cross-position comparability that
+value over replacement depends on.
+
+Three honest limits, two of them raised by whoever built the spreadsheet:
+
+- **Boom rate is backward-looking.** It says nothing about a player whose situation changed
+  — new team, new offense, a target share that just moved. Treat a big riser skeptically.
+- **2026 rookies have no history at all.** 22 of the top 250 have blank boom columns. They
+  are scored **neutral, never penalized**, so consensus rank alone carries them.
+- **Never normalize boom across positions.** A weekly top-12 finish is a far easier bar at
+  QB (32 starters) than at WR. Normalizing across positions ranks backup quarterbacks above
+  real players; everything here is computed within position.
+- Short 2025 samples are regressed toward neutral rather than trusted (min 8 games).
+- **No boom data for K or DEF** — nflverse weekly stats carry neither, so those are drafted
+  off consensus alone.
+
+**Boom influence** is a slider in Setup, defaulting to 35%. Set it to 0 for pure expert
+consensus. Raising it lets the spike-week data move players further within their position.
+
+Injuries: 47 players expected to miss 1+ week are flagged, and drop 7 spots within their
+position. Only 3 land inside the top 250 — serious injuries are already priced into
+consensus, so this matters more as a waiver filter than a draft filter.
+
+Simulated across all 12 draft slots in both formats against roster-aware opponents: every
+slot finishes with a legal, complete 16-man roster and no empty starting spots. Best ball
+lands 2 QBs every time at a 35-44% average boom rate; redraft takes one at 27-34%.
 
 ## The rankings
 

@@ -223,7 +223,21 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
         <div><div class="hint" style="margin:0 0 5px">Rounds</div><input id="cfgRounds" type="number" inputmode="numeric" value="16"></div>
         <div><div class="hint" style="margin:0 0 5px">Scoring</div><select id="cfgScoring"><option value="1">Full PPR</option><option value="0.5">Half PPR</option><option value="0">Standard</option></select></div>
       </div>
-      <div class="hint">Starters: QB · RB · RB · WR · WR · TE · FLEX · FLEX · K · DEF</div>
+      <div class="hint" style="margin-top:10px">Format</div>
+      <select id="cfgMode" style="margin-top:5px">
+        <option value="bestball">Best ball — auto lineup, ceiling wins</option>
+        <option value="redraft">Redraft — you set the lineup weekly</option>
+      </select>
+      <div class="hint" style="margin-top:12px">Boom influence — <b id="bbVal">35%</b></div>
+      <input id="cfgSwing" type="range" min="0" max="60" step="5" value="35"
+        style="width:100%;padding:0;margin-top:6px;accent-color:var(--go);background:none;border:none">
+      <div class="hint" style="margin-top:2px">0% = pure expert consensus. Higher lets 2024-25 spike-week
+      rates move players within their position. The data is backward-looking, so it says nothing about
+      rookies and can misjudge anyone whose situation changed.</div>
+      <div class="hint" style="margin-top:10px">Starters: QB · RB · RB · WR · WR · TE · FLEX · FLEX · K · DEF<br>
+      Best ball rewards spike weeks, so boom rate and ceiling move the board, QB2 is a real
+      pick, and bench RB/WR keep value. Redraft ignores the boom layer and treats a backup
+      QB as dead weight.</div>
     </div>
     <div class="card">
       <div class="lbl">Seed with consensus rankings</div>
@@ -271,259 +285,261 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
    BASELINE BOARD — full-PPR season projections, 2026.
    These are the fallback/overlay ranks. When Sleeper sync is on, live
    NFL teams + market rank come from Sleeper and override the team field.
-   Format: Name|TEAM|POS|projectedPPRpoints
+   Schema: Name|TEAM|POS|proj|ECR|Bye|Gm25|PPG25|Boom25|Elite25|Ceil25|SD25|Gm24|PPG24|Boom24|Ceil24|Injury|BodyPart
+   Boom/Elite = share of weeks finishing top-12 / top-5 at the position (nflverse).
+   Blank boom columns = no NFL history (2026 rookies) — treated as neutral, never penalised.
    ======================================================================= */
 const RAW = `
-Ja'Marr Chase|CIN|WR|330|1|6
-Jahmyr Gibbs|DET|RB|330|2|6
-Puka Nacua|LAR|WR|300|3|11
-Bijan Robinson|ATL|RB|315|4|11
-Jaxon Smith-Njigba|SEA|WR|290|5|11
-Amon-Ra St. Brown|DET|WR|288|6|6
-CeeDee Lamb|DAL|WR|285|7|14
-Christian McCaffrey|SF|RB|300|8|8
-Justin Jefferson|MIN|WR|280|9|6
-Jonathan Taylor|IND|RB|295|10|13
-Drake London|ATL|WR|275|11|11
-A.J. Brown|NE|WR|265|12|11
-James Cook III|BUF|RB|275|13|7
-Nico Collins|HOU|WR|265|14|8
-Chase Brown|CIN|RB|268|15|6
-Chris Olave|NO|WR|258|16|8
-Brock Bowers|LV|TE|265|17|13
-George Pickens|DAL|WR|255|18|14
-Trey McBride|ARI|TE|240|19|14
-De'Von Achane|MIA|RB|265|20|6
-Saquon Barkley|PHI|RB|258|21|10
-DeVonta Smith|PHI|WR|250|22|10
-Malik Nabers|NYG|WR|245|23|8
-Kenneth Walker III|KC|RB|252|24|5
-Rashee Rice|KC|WR|240|25|5
-Omarion Hampton|LAC|RB|240|26|7
-Josh Allen|BUF|QB|400|27|7
-Ashton Jeanty|LV|RB|238|28|13
-Garrett Wilson|NYJ|WR|235|29|13
-Zay Flowers|BAL|WR|235|30|13
-Lamar Jackson|BAL|QB|395|31|13
-Ladd McConkey|LAC|WR|225|32|7
-Jaylen Waddle|DEN|WR|225|33|10
-Tetairoa McMillan|CAR|WR|220|34|5
-Colston Loveland|CHI|TE|205|35|10
-Tee Higgins|CIN|WR|220|36|6
-Derrick Henry|BAL|RB|235|37|13
-Drake Maye|NE|QB|390|38|11
-Breece Hall|NYJ|RB|232|39|13
-Emeka Egbuka|TB|WR|215|40|10
-Kyren Williams|LAR|RB|225|41|11
-Jeremiyah Love|ARI|RB|218|42|14
-Javonte Williams|DAL|RB|215|43|14
-Joe Burrow|CIN|QB|370|44|6
-Travis Etienne Jr.|NO|RB|210|45|8
-Luther Burden III|CHI|WR|215|46|10
-Terry McLaurin|WAS|WR|210|47|7
-Josh Jacobs|GB|RB|205|48|11
-Davante Adams|LAR|WR|210|49|11
-DJ Moore|BUF|WR|210|50|7
-Tyler Warren|IND|TE|175|51|13
-Jayden Daniels|WAS|QB|360|52|7
-D'Andre Swift|CHI|RB|195|53|10
-Jameson Williams|DET|WR|205|54|6
-Mike Evans|SF|WR|205|55|8
-Rome Odunze|CHI|WR|200|56|10
-Jalen Hurts|PHI|QB|345|57|10
-Cam Skattebo|NYG|RB|195|58|8
-Christian Watson|GB|WR|200|59|11
-Bucky Irving|TB|RB|190|60|10
-David Montgomery|HOU|RB|190|61|8
-Quinshon Judkins|CLE|RB|185|62|11
-Parker Washington|JAX|WR|200|63|7
-Caleb Williams|CHI|QB|340|64|10
-Bhayshul Tuten|JAX|RB|180|65|7
-Carnell Tate|TEN|WR|195|66|9
-Marvin Harrison Jr.|ARI|WR|195|67|14
-Justin Herbert|LAC|QB|330|68|7
-TreVeyon Henderson|NE|RB|175|69|11
-Jadarian Price|SEA|RB|170|70|11
-Harold Fannin Jr.|CLE|TE|175|71|11
-Chris Godwin Jr.|TB|WR|190|72|10
-Rhamondre Stevenson|NE|RB|170|73|11
-Dak Prescott|DAL|QB|325|74|14
-Trevor Lawrence|JAX|QB|325|75|7
-Jaylen Warren|PIT|RB|165|76|9
-Kyle Pitts Sr.|ATL|TE|170|77|11
-DK Metcalf|PIT|WR|190|78|9
-Brian Thomas Jr.|JAX|WR|185|79|7
-Michael Pittman Jr.|PIT|WR|185|80|9
-Tucker Kraft|GB|TE|170|81|11
-Courtland Sutton|DEN|WR|185|82|10
-Tony Pollard|TEN|RB|160|83|9
-Wan'Dale Robinson|TEN|WR|180|84|9
-Sam LaPorta|DET|TE|165|85|6
-Josh Downs|IND|WR|180|86|13
-Rico Dowdle|PIT|RB|155|87|9
-Michael Wilson|ARI|WR|175|88|14
-Jonathon Brooks|CAR|RB|150|89|5
-Quentin Johnston|LAC|WR|170|90|7
-RJ Harvey|DEN|RB|150|91|10
-Brock Purdy|SF|QB|320|92|8
-Jaxson Dart|NYG|QB|320|93|8
-Travis Kelce|KC|TE|155|94|5
-Bo Nix|DEN|QB|315|95|10
-George Kittle|SF|TE|150|96|8
-Chuba Hubbard|CAR|RB|145|97|5
-Kenny Gainwell|TB|RB|145|98|10
-Alec Pierce|IND|WR|170|99|13
-J.K. Dobbins|DEN|RB|140|100|10
-Patrick Mahomes II|KC|QB|310|101|5
-Stefon Diggs|WAS|WR|165|102|7
-Jayden Reed|GB|WR|165|103|11
-Jakobi Meyers|JAX|WR|165|104|7
-Matthew Stafford|LAR|QB|310|105|11
-Jordan Addison|MIN|WR|165|106|6
-Jared Goff|DET|QB|310|107|6
-Makai Lemon|PHI|WR|165|108|10
-Blake Corum|LAR|RB|140|109|11
-Dalton Kincaid|BUF|TE|145|110|7
-Rachaad White|WAS|RB|130|111|7
-Kyler Murray|MIN|QB|310|112|6
-Jacory Croskey-Merritt|WAS|RB|130|113|7
-Jordan Mason|MIN|RB|130|114|6
-Aaron Jones Sr.|MIN|RB|130|115|6
-Kyle Monangai|CHI|RB|125|116|10
-Dallas Goedert|PHI|TE|145|117|10
-KC Concepcion|CLE|WR|165|118|11
-Jake Ferguson|DAL|TE|140|119|14
-Baker Mayfield|TB|QB|300|120|10
-Jordan Love|GB|QB|300|121|11
-Isaiah Likely|NYG|TE|135|122|8
-Khalil Shakir|BUF|WR|165|123|7
-Tyler Shough|NO|QB|295|124|8
-Jalen Coker|CAR|WR|155|125|5
-Romeo Doubs|NE|WR|155|126|11
-Matthew Golden|GB|WR|155|127|11
-Malik Willis|MIA|QB|295|128|6
-Xavier Worthy|KC|WR|150|129|5
-Mark Andrews|BAL|TE|130|130|13
-Juwan Johnson|NO|TE|125|131|8
-Jordyn Tyson|NO|WR|150|132|8
-Woody Marks|HOU|RB|120|133|8
-Tyler Allgeier|ARI|RB|120|134|14
-Tyjae Spears|TEN|RB|120|135|9
-De'Zhaun Stribling|SF|WR|145|136|8
-Chris Rodriguez Jr.|JAX|RB|115|137|7
-Sam Darnold|SEA|QB|290|138|11
-C.J. Stroud|HOU|QB|290|139|8
-Daniel Jones|IND|QB|285|140|13
-Deebo Samuel Sr.|SF|WR|145|141|8
-Dylan Sampson|CLE|RB|115|142|11
-Rashid Shaheed|SEA|WR|145|143|11
-Keaton Mitchell|LAC|RB|115|144|7
-Denzel Boston|CLE|WR|140|145|11
-Cam Ward|TEN|QB|285|146|9
-Zach Charbonnet|SEA|RB|110|147|11
-Jonah Coleman|DEN|RB|105|148|10
-Brenton Strange|JAX|TE|125|149|7
-Chig Okonkwo|WAS|TE|120|150|7
-Dalton Schultz|HOU|TE|120|151|8
-Tre Tucker|LV|WR|135|152|13
-Tyrone Tracy Jr.|NYG|RB|100|153|8
-Isiah Pacheco|DET|RB|100|154|6
-Hunter Henry|NE|TE|120|155|11
-Adonai Mitchell|NYJ|WR|135|156|13
-Alvin Kamara|NO|RB|100|157|8
-Houston Texans|HOU|DEF|140|158|8
-Tank Bigsby|PHI|RB|95|159|10
-Bryce Young|CAR|QB|285|160|5
-Jerry Jeudy|CLE|WR|130|161|11
-MarShawn Lloyd|GB|RB|95|162|11
-Mike Washington Jr.|LV|RB|95|163|13
-Jauan Jennings|MIN|WR|130|164|6
-Jalen McMillan|TB|WR|130|165|10
-Braelon Allen|NYJ|RB|95|166|13
-Denver Broncos|DEN|DEF|136|167|10
-Seattle Seahawks|SEA|DEF|134|168|11
-Los Angeles Rams|LAR|DEF|132|169|11
-Brian Robinson Jr.|ATL|RB|90|170|11
-Kayshon Boutte|HOU|WR|130|171|8
-Tre' Harris|LAC|WR|130|172|7
-Dontayvion Wicks|PHI|WR|130|173|10
-Omar Cooper Jr.|NYJ|WR|125|174|13
-T.J. Hockenson|MIN|TE|115|175|6
-Ryan Flournoy|DAL|WR|125|176|14
-Philadelphia Eagles|PHI|DEF|130|177|10
-Jacoby Brissett|ARI|QB|275|178|14
-Pat Bryant|DEN|WR|120|179|10
-Brandon Aubrey|DAL|K|155|180|14
-Malik Washington|MIA|WR|120|181|6
-Jalen Nailor|LV|WR|120|182|13
-Emmett Johnson|KC|RB|90|183|5
-Pittsburgh Steelers|PIT|DEF|128|184|9
-New England Patriots|NE|DEF|126|185|11
-Minnesota Vikings|MIN|DEF|124|186|6
-Ray Davis|BUF|RB|85|187|7
-Jacksonville Jaguars|JAX|DEF|122|188|7
-Cameron Dicker|LAC|K|145|189|7
-Keenan Allen|IND|WR|117|190|13
-Los Angeles Chargers|LAC|DEF|120|191|7
-Travis Hunter|JAX|WR|114|192|7
-Ka'imi Fairbairn|HOU|K|142|193|8
-AJ Barner|SEA|TE|115|194|11
-Calvin Ridley|TEN|WR|111|195|9
-Kimani Vidal|LAC|RB|85|196|7
-Terrance Ferguson|LAR|TE|110|197|11
-Cam Little|JAX|K|142|198|7
-Baltimore Ravens|BAL|DEF|118|199|13
-Jason Myers|SEA|K|138|200|11
-Jaylin Noel|HOU|WR|108|201|8
-Sean Tucker|TB|RB|85|202|10
-Oronde Gadsden II|LAC|TE|110|203|7
-Tyler Loop|BAL|K|136|204|13
-Gunnar Helm|TEN|TE|110|205|9
-Nicholas Singleton|TEN|RB|85|206|9
-Eddy Pineiro|SF|K|135|207|8
-Kansas City Chiefs|KC|DEF|116|208|5
-Aaron Rodgers|PIT|QB|275|209|9
-Geno Smith|NYJ|QB|272|210|13
-Kenyon Sadiq|NYJ|TE|105|211|13
-Tank Dell|HOU|WR|105|212|8
-Green Bay Packers|GB|DEF|113|213|11
-James Conner|ARI|RB|82|214|14
-Jake Bates|DET|K|133|215|6
-Cairo Santos|CHI|K|130|216|10
-Cooper Kupp|SEA|WR|102|217|11
-Rashod Bateman|BAL|WR|99|218|13
-Darnell Mooney|NYG|WR|96|219|8
-Evan McPherson|CIN|K|130|220|6
-Jaydon Blue|DAL|RB|79|221|14
-Isaac TeSlaa|DET|WR|93|222|6
-Detroit Lions|DET|DEF|110|223|6
-Troy Franklin|DEN|WR|90|224|10
-Harrison Mevis|LAR|K|130|225|11
-Pat Freiermuth|PIT|TE|105|226|9
-Cleveland Browns|CLE|DEF|107|227|11
-Kaytron Allen|WAS|RB|76|228|7
-Andy Borregales|NE|K|129|229|11
-Chase McLaughlin|TB|K|126|230|10
-Ja'Kobi Lane|BAL|WR|87|231|13
-Buffalo Bills|BUF|DEF|104|232|7
-Cade Otton|TB|TE|100|233|10
-Germie Bernard|PIT|WR|84|234|9
-Emanuel Wilson|SEA|RB|73|235|11
-Zachariah Branch|ATL|WR|81|236|11
-Greg Dulcich|MIA|TE|95|237|6
-Antonio Williams|WAS|WR|78|238|7
-Justice Hill|BAL|RB|70|239|13
-George Holani|SEA|RB|67|240|11
-Kaelon Black|SF|RB|64|241|8
-Jaylen Wright|MIA|RB|61|242|6
-Caleb Douglas|MIA|WR|75|243|6
-Malachi Fields|NYG|WR|72|244|8
-Evan Engram|DEN|TE|90|245|10
-Devaughn Vele|NO|WR|69|246|8
-Jack Bech|LV|WR|66|247|13
-David Njoku|LAC|TE|85|248|7
-Harrison Butker|KC|K|123|249|5
-Keon Coleman|BUF|WR|63|250|7
+Ja'Marr Chase|CIN|WR|330|1|6|16|19.6|56.2|43.8|38.1|10.3|17|23.7|58.8|55.4||
+Jahmyr Gibbs|DET|RB|330|2|6|17|21.6|52.9|35.3|55.4|13.5|17|21.4|64.7|46||
+Puka Nacua|LAR|WR|300|3|11|16|23.4|62.5|56.2|46.5|10.2|11|18.8|36.4|41.8||
+Bijan Robinson|ATL|RB|315|4|11|17|21.8|70.6|52.9|39.9|10.3|17|20.1|58.8|31.3||
+Jaxon Smith-Njigba|SEA|WR|290|5|11|17|21.2|70.6|23.5|37.1|7.5|17|14.9|23.5|37||
+Amon-Ra St. Brown|DET|WR|288|6|6|17|19.1|41.2|29.4|41.4|10.9|17|18.6|41.2|38.7||
+CeeDee Lamb|DAL|WR|285|7|14|13|15.4|30.8|7.7|24.2|6.0|15|17.6|26.7|39.6||
+Christian McCaffrey|SF|RB|300|8|8|17|24.5|82.4|52.9|39.1|8.2|4|11.9|25|16.7||
+Justin Jefferson|MIN|WR|280|9|6|17|11.8|17.6|0|22.6|5.8|17|18.7|41.2|36.4||
+Jonathan Taylor|IND|RB|295|10|13|17|21.3|47.1|35.3|49.6|12.4|14|17.5|42.9|39.8||
+Drake London|ATL|WR|275|11|11|12|16.8|50|33.3|38.8|11.4|17|16.5|23.5|40.7||
+A.J. Brown|NE|WR|265|12|11|15|14.7|26.7|26.7|35.2|9.8|13|16.7|46.2|25||
+James Cook III|BUF|RB|275|13|7|17|17.8|58.8|23.5|33.6|9.2|16|16.7|56.2|28.5||
+Nico Collins|HOU|WR|265|14|8|15|15.1|33.3|20|24.2|6.5|12|17.6|33.3|33.1||
+Chase Brown|CIN|RB|268|15|6|17|16.6|47.1|17.6|32.9|7.3|16|15.9|50|26.7||
+Chris Olave|NO|WR|258|16|8|16|16.8|31.2|18.8|36.8|7.9|8|9.6|25|20.6||
+Brock Bowers|LV|TE|265|17|13|12|14.7|58.3|25|43.3|10.1|17|15.4|64.7|31.3||
+George Pickens|DAL|WR|255|18|14|17|17.2|29.4|29.4|33.4|9.7|14|11.7|14.3|22.1||
+Trey McBride|ARI|TE|240|19|14|17|18.6|88.2|52.9|37.4|8.4|16|15.2|75|30.3||
+De'Von Achane|MIA|RB|265|20|6|16|20.2|68.8|18.8|40.5|7.0|17|17.6|52.9|32.1||
+Saquon Barkley|PHI|RB|258|21|10|16|14.5|37.5|6.2|33.4|7.2|16|22.2|62.5|46.2||
+DeVonta Smith|PHI|WR|250|22|10|17|11.9|17.6|5.9|33.3|7.8|13|15.3|23.1|30||
+Malik Nabers|NYG|WR|245|23|8|4|14.3|25|25|37.7|16.1|15|18.2|33.3|36.1||
+Kenneth Walker III|KC|RB|252|24|5|17|11.3|29.4|0|25.4|6.5|11|16.5|36.4|33.6||
+Rashee Rice|KC|WR|240|25|5|8|18.8|62.5|25|29.4|8.1|4|16.2|25|29.1||
+Omarion Hampton|LAC|RB|240|26|7|9|15.1|33.3|11.1|27.5|8.1||||||
+Josh Allen|BUF|QB|400|27|7|16|22.8|62.5|37.5|42.7|10.4|16|23.7|68.8|51.9||
+Ashton Jeanty|LV|RB|238|28|13|17|14.4|29.4|23.5|33.5|8.7||||||
+Garrett Wilson|NYJ|WR|235|29|13|7|14.2|57.1|14.3|24.4|9.7|17|14.8|17.6|30||
+Zay Flowers|BAL|WR|235|30|13|17|14.3|23.5|11.8|29.8|7.5|17|12.3|17.6|29.7||
+Lamar Jackson|BAL|QB|395|31|13|13|16.5|46.2|23.1|29.4|9.1|17|25.3|82.4|36.1||
+Ladd McConkey|LAC|WR|225|32|7|16|11.3|18.8|0|23|6.9|16|15.1|18.8|29.4||
+Jaylen Waddle|DEN|WR|225|33|10|16|12.1|18.8|6.2|23|6.9|15|10.0|13.3|28.4||
+Tetairoa McMillan|CAR|WR|220|34|5|17|12.6|11.8|5.9|33|7.1||||||
+Colston Loveland|CHI|TE|205|35|10|16|10.3|31.2|25|29.8|8.5||||||
+Tee Higgins|CIN|WR|220|36|6|15|14.1|20|13.3|33.1|8.2|12|18.5|33.3|40.1||
+Derrick Henry|BAL|RB|235|37|13|17|16.4|41.2|17.6|45.6|10|17|19.8|52.9|35.9||
+Drake Maye|NE|QB|390|38|11|17|20.7|58.8|23.5|32.4|5.4|13|13.6|23.1|20.8||
+Breece Hall|NYJ|RB|232|39|13|16|13.0|31.2|6.2|32.9|7.6|16|15.1|37.5|31.1||
+Emeka Egbuka|TB|WR|215|40|10|17|11.5|23.5|17.6|31.3|8.4||||||
+Kyren Williams|LAR|RB|225|41|11|17|15.5|41.2|11.8|31.1|6.1|16|17.0|37.5|31.6||
+Jeremiyah Love|ARI|RB|218|42|14||||||||||||
+Javonte Williams|DAL|RB|215|43|14|16|15.2|31.2|12.5|26.9|6.0|17|9.3|17.6|26.1||
+Joe Burrow|CIN|QB|370|44|6|8|16.8|62.5|25|29|8.6|17|21.9|70.6|37||
+Travis Etienne Jr.|NO|RB|210|45|8|17|14.9|35.3|11.8|31.5|6.9|15|8.7|0|14.8||
+Luther Burden III|CHI|WR|215|46|10|15|8.5|13.3|6.7|27.8|7.5||||||
+Terry McLaurin|WAS|WR|210|47|7|10|11.4|10|0|22.6|5.1|17|15.8|29.4|27.3||
+Josh Jacobs|GB|RB|205|48|11|15|15.8|46.7|20|32|9.0|17|17.2|47.1|28.6||
+Davante Adams|LAR|WR|210|49|11|14|15.9|42.9|7.1|26.5|6.8|14|17.2|35.7|42.8||
+DJ Moore|BUF|WR|210|50|7|17|10.1|23.5|5.9|23.4|8.2|17|14.0|23.5|27.5||
+Tyler Warren|IND|TE|175|51|13|17|11.1|47.1|23.5|18.3|4.9||||||
+Jayden Daniels|WAS|QB|360|52|7|7|16.3|14.3|0|21.6|6.4|17|20.9|70.6|34.4||
+D'Andre Swift|CHI|RB|195|53|10|16|14.3|31.2|6.2|25.5|6.7|17|12.6|23.5|29.5||
+Jameson Williams|DET|WR|205|54|6|17|12.9|41.2|17.6|26.9|9.0|15|14.2|26.7|26||
+Mike Evans|SF|WR|205|55|8|8|10.6|12.5|0|19.2|5.8|14|17.2|42.9|36.9||
+Rome Odunze|CHI|WR|200|56|10|12|12.2|25|8.3|31.8|9.2|17|8.5|5.9|23.4||
+Jalen Hurts|PHI|QB|345|57|10|16|18.8|62.5|18.8|30.9|7.6|15|21.0|73.3|35.1||
+Cam Skattebo|NYG|RB|195|58|8|8|16.0|37.5|25|31|8.6||||||
+Christian Watson|GB|WR|200|59|11|10|13.2|40|10|24.9|7.7|14|7.5|0|19||
+Bucky Irving|TB|RB|190|60|10|10|13.8|20|0|25.5|5.6|17|14.4|35.3|27.5||
+David Montgomery|HOU|RB|190|61|8|17|9.8|11.8|5.9|29.4|6.7|14|15.8|42.9|24.5||
+Quinshon Judkins|CLE|RB|185|62|11|14|12.1|28.6|7.1|26.4|6.7||||||
+Parker Washington|JAX|WR|200|63|7|16|11.5|25|6.2|26.5|7.4|14|6.9|7.1|24.3||
+Caleb Williams|CHI|QB|340|64|10|17|18.8|52.9|17.6|38.7|8.2|17|15.0|29.4|28.6||
+Bhayshul Tuten|JAX|RB|180|65|7|15|5.9|0|0|15.4|4.9||||||
+Carnell Tate|TEN|WR|195|66|9||||||||||||
+Marvin Harrison Jr.|ARI|WR|195|67|14|12|10.7|16.7|0|22.6|7.1|17|11.6|11.8|29||
+Justin Herbert|LAC|QB|330|68|7|16|17.9|31.2|31.2|30.2|7.7|17|16.8|47.1|28||
+TreVeyon Henderson|NE|RB|175|69|11|17|12.1|23.5|17.6|32.3|9.6||||||
+Jadarian Price|SEA|RB|170|70|11||||||||||||
+Harold Fannin Jr.|CLE|TE|175|71|11|16|11.7|50|18.8|25.4|5.7||||||
+Chris Godwin Jr.|TB|WR|190|72|10|9|9.2|11.1|11.1|23.8|6.7|7|19.7|42.9|35.5||
+Rhamondre Stevenson|NE|RB|170|73|11|14|12.8|21.4|14.3|35.3|10.1|15|11.7|33.3|23.5||
+Dak Prescott|DAL|QB|325|74|14|17|18.5|58.8|29.4|31|8.3|8|14.6|25|29.9||
+Trevor Lawrence|JAX|QB|325|75|7|17|19.9|64.7|23.5|44.3|8.8|10|14.5|30|23.3||
+Jaylen Warren|PIT|RB|165|76|9|16|13.6|25|6.2|29.1|5.6|15|8.3|13.3|16.2||
+Kyle Pitts Sr.|ATL|TE|170|77|11|17|12.4|52.9|23.5|45.6|9.9|17|7.7|35.3|25.1||
+DK Metcalf|PIT|WR|190|78|9|15|12.5|26.7|0|23.6|6|15|12.8|20|28.9||
+Brian Thomas Jr.|JAX|WR|185|79|7|14|9.9|7.1|0|23|5.0|17|16.7|35.3|32.5||
+Michael Pittman Jr.|PIT|WR|185|80|9|17|11.9|17.6|5.9|23.5|7.5|16|10.4|6.2|25.9||
+Tucker Kraft|GB|TE|170|81|11|8|14.7|50|25|33.3|9.9|17|9.6|35.3|24.8||
+Courtland Sutton|DEN|WR|185|82|10|17|12.9|23.5|11.8|24.3|7.5|16|15.0|25|29.7||
+Tony Pollard|TEN|RB|160|83|9|17|10.9|11.8|5.9|28.1|5.6|16|12.5|18.8|21.9||
+Wan'Dale Robinson|TEN|WR|180|84|9|16|13.6|25|18.8|30.6|8.2|17|10.8|0|18.1||
+Sam LaPorta|DET|TE|165|85|6|9|11.9|55.6|44.4|21.7|6.5|16|10.9|62.5|18.4||
+Josh Downs|IND|WR|180|86|13|16|8.7|0|0|17.7|4.7|14|13.1|28.6|22.2||
+Rico Dowdle|PIT|RB|155|87|9|17|12.7|17.6|17.6|33.9|9.8|16|12.4|25|21.7||
+Michael Wilson|ARI|WR|175|88|14|17|13.0|29.4|11.8|37.2|10.6|16|7.8|0|14.4||
+Jonathon Brooks|CAR|RB|150|89|5|||||||3|2.5|0|7.1||
+Quentin Johnston|LAC|WR|170|90|7|13|13.2|23.1|7.7|24.9|7.4|15|11.7|20|31.6||
+RJ Harvey|DEN|RB|150|91|10|17|12.2|41.2|11.8|24.1|7.7||||||
+Brock Purdy|SF|QB|320|92|8|9|19.7|44.4|33.3|36.9|10.3|15|17.8|53.3|30.3||
+Jaxson Dart|NYG|QB|320|93|8|14|17.3|57.1|35.7|28.4|10.2||||||
+Travis Kelce|KC|TE|155|94|5|17|11.4|52.9|23.5|24.1|6.4|16|12.2|56.2|25||
+Bo Nix|DEN|QB|315|95|10|17|17.9|35.3|11.8|40|8.4|17|18.7|52.9|33.5||
+George Kittle|SF|TE|150|96|8|11|14.7|63.6|27.3|24.7|8.3|15|15.8|86.7|24.8||
+Chuba Hubbard|CAR|RB|145|97|5|15|8.4|20|6.7|20.4|6.2|15|16.1|53.3|32.5||
+Kenny Gainwell|TB|RB|145|98|10|17|13.0|41.2|17.6|31.4|9.4|17|3.7|0|9||
+Alec Pierce|IND|WR|170|99|13|15|12.2|13.3|13.3|29.2|8.3|16|10.1|25|24.2||
+J.K. Dobbins|DEN|RB|140|100|10|10|11.6|0|0|15.5|4.1|13|14.8|38.5|24.5||
+Patrick Mahomes II|KC|QB|310|101|5|14|20.4|64.3|35.7|31.5|8|16|17.7|37.5|28.8||
+Stefon Diggs|WAS|WR|165|102|7|17|12.4|23.5|5.9|24.6|6.8|8|15.2|12.5|21.9||
+Jayden Reed|GB|WR|165|103|11|5|9.7|0|0|13.5|2.5|17|11.6|11.8|33.1||
+Jakobi Meyers|JAX|WR|165|104|7|16|11.0|6.2|0|21.3|4.3|15|14.5|20|27.3||
+Matthew Stafford|LAR|QB|310|105|11|17|20.6|58.8|41.2|30.9|7.0|16|13.4|25|27.8||
+Jordan Addison|MIN|WR|165|106|6|14|9.7|7.1|0|21.8|5.7|15|14.2|20|39.3||
+Jared Goff|DET|QB|310|107|6|17|17.5|41.2|17.6|34|7.5|17|19.1|47.1|41.1||
+Makai Lemon|PHI|WR|165|108|10||||||||||||
+Blake Corum|LAR|RB|140|109|11|17|7.2|5.9|5.9|26.1|6.5|15|2.2|0|4.3||
+Dalton Kincaid|BUF|TE|145|110|7|12|10.5|41.7|25|22.1|6.6|13|7.8|23.1|13.1||
+Rachaad White|WAS|RB|130|111|7|17|8.4|11.8|0|23.1|5.5|15|13.3|20|29.1||
+Kyler Murray|MIN|QB|310|112|6|5|15.6|0|0|18.3|1.8|17|17.5|41.2|28.7||
+Jacory Croskey-Merritt|WAS|RB|130|113|7|17|8.2|11.8|5.9|27|7.5||||||
+Jordan Mason|MIN|RB|130|114|6|16|8.1|6.2|0|23.6|5.5|12|9.6|25|24||
+Aaron Jones Sr.|MIN|RB|130|115|6|12|9.9|16.7|0|15.9|4.5|17|14.2|29.4|25.8||
+Kyle Monangai|CHI|RB|125|116|10|17|8.6|17.6|5.9|22.8|6.3||||||
+Dallas Goedert|PHI|TE|145|117|10|15|12.3|40|33.3|26|7.2|10|10.4|50|27||
+KC Concepcion|CLE|WR|165|118|11||||||||||||
+Jake Ferguson|DAL|TE|140|119|14|17|11.1|52.9|29.4|23.9|7.1|14|7.5|35.7|15.5||
+Baker Mayfield|TB|QB|300|120|10|17|16|47.1|5.9|26.7|6.2|17|21.5|76.5|34.6||
+Jordan Love|GB|QB|300|121|11|15|15.7|40|20|28.3|7.4|15|15.6|40|28.2||
+Isaiah Likely|NYG|TE|135|122|8|12|5.1|16.7|0|12.5|4.1|15|8.2|33.3|26.1||
+Khalil Shakir|BUF|WR|165|123|7|16|10.4|6.2|0|20.8|5.8|15|12.2|13.3|21.6||
+Tyler Shough|NO|QB|295|124|8|11|14.4|45.5|9.1|21.9|7.7||||||
+Jalen Coker|CAR|WR|155|125|5|11|8.2|9.1|0|17.4|5.9|11|8.4|9.1|21||
+Romeo Doubs|NE|WR|155|126|11|16|10.3|6.2|6.2|29.8|7.3|13|10.2|7.7|19.9||
+Matthew Golden|GB|WR|155|127|11|14|5|0|0|13.2|4.3||||||
+Malik Willis|MIA|QB|295|128|6|4|12.8|25|25|31.5|13.5|6|8.6|16.7|25.4||
+Xavier Worthy|KC|WR|150|129|5|14|7.8|0|0|17.1|4.5|16|11.7|12.5|22.9||
+Mark Andrews|BAL|TE|130|130|13|17|7.7|23.5|17.6|27.1|6.8|17|11.1|64.7|20.1||
+Juwan Johnson|NO|TE|125|131|8|17|10.6|52.9|23.5|19.2|4.8|15|8.2|26.7|15||
+Jordyn Tyson|NO|WR|150|132|8|||||||||||Doubtful|Hamstring
+Woody Marks|HOU|RB|120|133|8|16|9.1|12.5|0|27.9|6.9||||||
+Tyler Allgeier|ARI|RB|120|134|14|17|7.2|5.9|0|17.7|5.3|17|6.2|5.9|19.8||
+Tyjae Spears|TEN|RB|120|135|9|13|8.6|15.4|0|21.5|5.5|12|9.5|25|27.2||
+De'Zhaun Stribling|SF|WR|145|136|8||||||||||||
+Chris Rodriguez Jr.|JAX|RB|115|137|7|12|7.7|0|0|15.3|4.8|7|4.5|0|15.4||
+Sam Darnold|SEA|QB|290|138|11|17|13.8|41.2|11.8|27.6|8.0|17|18.1|58.8|34.6||
+C.J. Stroud|HOU|QB|290|139|8|14|14.9|28.6|7.1|28.8|6.5|17|13.0|11.8|23.5||
+Daniel Jones|IND|QB|285|140|13|13|17.4|53.8|23.1|29.5|7.1|10|13.5|40|24.4||
+Deebo Samuel Sr.|SF|WR|145|141|8|16|11.8|25|6.2|23.6|6.9|15|10.4|20|25.1||
+Dylan Sampson|CLE|RB|115|142|11|15|5.8|13.3|0|17.3|5.6||||||
+Rashid Shaheed|SEA|WR|145|143|11|18|8.7|5.6|0|21.4|5.8|6|13.6|0|20.9||
+Keaton Mitchell|LAC|RB|115|144|7|13|4.3|0|0|11.1|3.3|4|1.7|0|5.8||
+Denzel Boston|CLE|WR|140|145|11||||||||||||
+Cam Ward|TEN|QB|285|146|9|17|11.0|11.8|5.9|23.9|5.4||||||
+Zach Charbonnet|SEA|RB|110|147|11|16|11.3|18.8|0|26.2|6.7|17|11.0|17.6|38.3|PUP|Knee - ACL
+Jonah Coleman|DEN|RB|105|148|10||||||||||||
+Brenton Strange|JAX|TE|125|149|7|12|9.8|41.7|16.7|17.2|4.7|14|6.5|28.6|18.3||
+Chig Okonkwo|WAS|TE|120|150|7|17|7.3|29.4|5.9|16.4|4.5|16|7.1|25|19.1||
+Dalton Schultz|HOU|TE|120|151|8|17|10.4|47.1|11.8|21.6|5.6|17|7.0|17.6|17.1||
+Tre Tucker|LV|WR|135|152|13|17|9.5|5.9|5.9|40.9|8.9|17|7.6|5.9|22.6||
+Tyrone Tracy Jr.|NYG|RB|100|153|8|15|10.7|20|13.3|27.9|7.7|17|10.7|17.6|23|Out|Neck
+Isiah Pacheco|DET|RB|100|154|6|13|6.7|0|0|13.5|3.9|7|8.1|0|16.1||
+Hunter Henry|NE|TE|120|155|11|17|10.5|41.2|11.8|29|7.3|16|9.1|43.8|18.9||
+Adonai Mitchell|NYJ|WR|135|156|13|16|5.5|6.2|6.2|24.2|6.8|17|3.2|0|13.1||
+Alvin Kamara|NO|RB|100|157|8|11|9.2|0|0|16|4.9|14|18.9|42.9|44||
+Houston Texans|HOU|DEF|140|158|8||||||||||||
+Tank Bigsby|PHI|RB|95|159|10|15|3.6|6.7|0|17.6|5.2|16|8.1|12.5|25.9||
+Bryce Young|CAR|QB|285|160|5|16|13.6|25|12.5|31.8|7.7|14|13.9|28.6|36.4||
+Jerry Jeudy|CLE|WR|130|161|11|17|7.1|5.9|0|19.8|5.2|17|14.2|17.6|40.5||
+MarShawn Lloyd|GB|RB|95|162|11|||||||1|2.8|0|2.8||
+Mike Washington Jr.|LV|RB|95|163|13||||||||||||
+Jauan Jennings|MIN|WR|130|164|6|15|11.6|13.3|0|19.9|5.7|15|14.0|20|46.5||
+Jalen McMillan|TB|WR|130|165|10|4|7.5|25|0|18.4|7.4|13|10.4|7.7|23||
+Braelon Allen|NYJ|RB|95|166|13|4|3.8|0|0|6.9|3.4|17|5.0|5.9|19.6||
+Denver Broncos|DEN|DEF|136|167|10||||||||||||
+Seattle Seahawks|SEA|DEF|134|168|11||||||||||||
+Los Angeles Rams|LAR|DEF|132|169|11||||||||||||
+Brian Robinson Jr.|ATL|RB|90|170|11|17|3.7|0|0|11.5|3.2|14|11.4|14.3|20.3||
+Kayshon Boutte|HOU|WR|130|171|8|14|8.9|14.3|7.1|26.3|7.4|15|8.1|13.3|24.7||
+Tre' Harris|LAC|WR|130|172|7|16|4.3|0|0|9.4|2.9||||||
+Dontayvion Wicks|PHI|WR|130|173|10|13|5.8|7.7|7.7|28|7.0|17|6.5|5.9|24.8||
+Omar Cooper Jr.|NYJ|WR|125|174|13||||||||||||
+T.J. Hockenson|MIN|TE|115|175|6|15|7.5|20|6.7|15.9|4.0|10|8.7|30|18.4||
+Ryan Flournoy|DAL|WR|125|176|14|15|7.6|6.7|6.7|26.5|7.2|9|2.0|0|7.1||
+Philadelphia Eagles|PHI|DEF|130|177|10||||||||||||
+Jacoby Brissett|ARI|QB|275|178|14|14|16.2|64.3|7.1|24.8|7.6|7|6.5|0|10.6||
+Pat Bryant|DEN|WR|120|179|10|13|5.8|0|0|13.2|4.1||||||
+Brandon Aubrey|DAL|K|155|180|14||||||||||||
+Malik Washington|MIA|WR|120|181|6|17|6.9|0|0|13.6|3.3|14|4.1|0|10.5||
+Jalen Nailor|LV|WR|120|182|13|17|5.9|11.8|5.9|23.4|6.7|15|7|0|19.1||
+Emmett Johnson|KC|RB|90|183|5||||||||||||
+Pittsburgh Steelers|PIT|DEF|128|184|9||||||||||||
+New England Patriots|NE|DEF|126|185|11||||||||||||
+Minnesota Vikings|MIN|DEF|124|186|6||||||||||||
+Ray Davis|BUF|RB|85|187|7|17|3.8|5.9|5.9|25.4|6.3|17|6.8|0|18.2||
+Jacksonville Jaguars|JAX|DEF|122|188|7||||||||||||
+Cameron Dicker|LAC|K|145|189|7||||||||||||
+Keenan Allen|IND|WR|117|190|13|17|10.8|17.6|5.9|28.9|6.8|15|12.3|26.7|29.1||
+Los Angeles Chargers|LAC|DEF|120|191|7||||||||||||
+Travis Hunter|JAX|WR|114|192|7|7|9.1|14.3|0|24.1|7.0||||||
+Ka'imi Fairbairn|HOU|K|142|193|8||||||||||||
+AJ Barner|SEA|TE|115|194|11|17|8.7|35.3|11.8|24.3|6.5|15|5.2|13.3|14.4||
+Calvin Ridley|TEN|WR|111|195|9|7|6.8|0|0|18.1|5.5|17|11.7|17.6|25.4||
+Kimani Vidal|LAC|RB|85|196|7|13|9.1|30.8|7.7|22.8|8.3|9|3.6|0|13.1||
+Terrance Ferguson|LAR|TE|110|197|11|11|4.7|9.1|0|13.4|5.2||||||
+Cam Little|JAX|K|142|198|7||||||||||||
+Baltimore Ravens|BAL|DEF|118|199|13||||||||||||
+Jason Myers|SEA|K|138|200|11||||||||||||
+Jaylin Noel|HOU|WR|108|201|8|17|4.0|0|0|14.6|4.9||||||
+Sean Tucker|TB|RB|85|202|10|17|5.4|5.9|5.9|34|8.2|17|4.0|5.9|34.2||
+Oronde Gadsden II|LAC|TE|110|203|7|15|8.8|33.3|13.3|29.4|7.5||||||
+Tyler Loop|BAL|K|136|204|13||||||||||||
+Gunnar Helm|TEN|TE|110|205|9|16|5.7|18.8|0|14.9|4.0||||||
+Nicholas Singleton|TEN|RB|85|206|9||||||||||||
+Eddy Pineiro|SF|K|135|207|8||||||||||||
+Kansas City Chiefs|KC|DEF|116|208|5||||||||||||
+Aaron Rodgers|PIT|QB|275|209|9|16|14.2|25|0|25.7|6.2|17|15.1|35.3|30.1||
+Geno Smith|NYJ|QB|272|210|13|15|11.6|13.3|6.7|26.3|7.3|17|15.7|47.1|26.3||
+Kenyon Sadiq|NYJ|TE|105|211|13||||||||||||
+Tank Dell|HOU|WR|105|212|8|||||||14|10|7.1|21.8||
+Green Bay Packers|GB|DEF|113|213|11||||||||||||
+James Conner|ARI|RB|82|214|14|3|11.1|0|0|14.4|4.0|16|15.9|37.5|30.8||
+Jake Bates|DET|K|133|215|6||||||||||||
+Cairo Santos|CHI|K|130|216|10||||||||||||
+Cooper Kupp|SEA|WR|102|217|11|16|7.3|0|0|16|4.0|12|14.6|33.3|32||
+Rashod Bateman|BAL|WR|99|218|13|13|4.3|0|0|17.3|4.8|16|10.9|18.8|23||
+Darnell Mooney|NYG|WR|96|219|8|15|5.5|0|0|16.4|3.8|16|12.1|12.5|31.5||
+Evan McPherson|CIN|K|130|220|6||||||||||||
+Jaydon Blue|DAL|RB|79|221|14|5|4.1|0|0|12.4|5.0||||||
+Isaac TeSlaa|DET|WR|93|222|6|14|5.4|0|0|15.2|5.6||||||
+Detroit Lions|DET|DEF|110|223|6||||||||||||
+Troy Franklin|DEN|WR|90|224|10|17|10.4|17.6|5.9|26.9|7.6|16|4.2|0|11.6||
+Harrison Mevis|LAR|K|130|225|11||||||||||||
+Pat Freiermuth|PIT|TE|105|226|9|15|7.6|20|6.7|28.1|6.5|17|10.0|41.2|22.5||
+Cleveland Browns|CLE|DEF|107|227|11||||||||||||
+Kaytron Allen|WAS|RB|76|228|7||||||||||||
+Andy Borregales|NE|K|129|229|11||||||||||||
+Chase McLaughlin|TB|K|126|230|10||||||||||||
+Ja'Kobi Lane|BAL|WR|87|231|13||||||||||||
+Buffalo Bills|BUF|DEF|104|232|7||||||||||||
+Cade Otton|TB|TE|100|233|10|15|8.2|20|6.7|22.4|6.0|14|10.0|42.9|29.1||
+Germie Bernard|PIT|WR|84|234|9||||||||||||
+Emanuel Wilson|SEA|RB|73|235|11|17|5.6|5.9|5.9|26.5|6.9|17|5.7|0|16.5||
+Zachariah Branch|ATL|WR|81|236|11||||||||||||
+Greg Dulcich|MIA|TE|95|237|6|9|7.0|11.1|11.1|16.1|4.0|4|1.9|0|4.6||
+Antonio Williams|WAS|WR|78|238|7||||||||||||
+Justice Hill|BAL|RB|70|239|13|10|6.5|10|10|28.7|8.6|15|8.5|13.3|21.6||
+George Holani|SEA|RB|67|240|11|10|2.1|0|0|9.1|3.2|3|0.6|0|1||
+Kaelon Black|SF|RB|64|241|8||||||||||||
+Jaylen Wright|MIA|RB|61|242|6|9|5.4|11.1|0|16.7|5.5|13|2.0|0|8.6||
+Caleb Douglas|MIA|WR|75|243|6||||||||||||
+Malachi Fields|NYG|WR|72|244|8||||||||||||
+Evan Engram|DEN|TE|90|245|10|16|6.4|12.5|0|13.9|3.9|9|9.9|44.4|18.2||
+Devaughn Vele|NO|WR|69|246|8|9|7.4|11.1|0|23.3|6.8|13|8.2|0|15||
+Jack Bech|LV|WR|66|247|13|14|3.0|0|0|11|3.2||||||
+David Njoku|LAC|TE|85|248|7|11|7.8|27.3|0|18.7|5.0|11|13.5|63.6|26.2||
+Harrison Butker|KC|K|123|249|5||||||||||||
+Keon Coleman|BUF|WR|63|250|7|12|8.5|8.3|8.3|25.2|6.0|13|8.6|0|18||
 `;
 
 /* ============================ CONFIG ============================ */
@@ -531,13 +547,25 @@ const STARTERS = {QB:1, RB:2, WR:2, TE:1, FLEX:2, K:1, DEF:1};
 const FLEXOK = ['RB','WR','TE'];
 const SLOTORDER = ['QB','RB','RB','WR','WR','TE','FLEX','FLEX','K','DEF'];
 /* replacement ranks for 12-team, 2WR + 2FLEX, full PPR */
-const REPL = {QB:13, RB:33, WR:39, TE:13, K:13, DEF:13};
+/* Replacement level differs by format. Best ball rosters ~2 QB and ~2-3 TE per
+   team, so the last startable player at those spots sits far deeper. */
+const REPL_REDRAFT  = {QB:13, RB:31, WR:42, TE:13, K:13, DEF:13};
+/* Only one QB and one TE start each week even in best ball, so their
+   replacement level barely moves; what changes is that more roster spots go
+   to RB/WR. Pushing the QB baseline deep inflates every quarterback's value
+   over replacement and buries the rest of the roster. */
+const REPL_BESTBALL = {QB:14, RB:30, WR:48, TE:15, K:13, DEF:13};
+/* Boom-score weights, from the Inputs tab of the draft board workbook. */
+const W = {boom:0.45, ceil:0.25, ppg:0.30};
+const MIN_GM = 8;        // below this, spike-week rate is low-sample and gets regressed
+const BB_SWING_DEFAULT = 0.35;  // how far a boom profile may move a player's value
+const INJ_SPOTS = 7;     // positional spots to dock a player expected to miss time
 const SIGMA = 8;              // ADP noise, in picks
-const LS = 'draftroom.v1';
+const LS = 'draftroom.v2';
 
 /* ============================ STATE ============================ */
 let S = {
-  teams:12, rounds:16, slot:null, scoring:1,
+  teams:12, rounds:16, slot:null, scoring:1, mode:'bestball', bbSwing:0.35,
   taken:{},          // key -> 'me' | 'them'
   order:[],          // [{key,by,pick}] chronological
   draftId:null, userId:null, sleeperSlot:null,
@@ -552,7 +580,14 @@ let posFilter = 'ALL';
 let sheetKey = null;
 
 const $ = s => document.querySelector(s);
-const norm = s => s.toLowerCase().replace(/[^a-z]/g,'').replace(/^(.*?)(jr|sr|ii|iii|iv)$/,'$1');
+/* JoinKey spec: lowercased, ASCII-folded, punctuation-stripped, suffix-stripped.
+   The suffix must be dropped as a whole token — a naive trailing match turns
+   "Kenneth Walker III" into "kennethwalkeri" and silently breaks every join. */
+const norm = s => String(s).toLowerCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  .replace(/[^a-z\s]/g,' ')
+  .replace(/\s+(jr|sr|ii|iii|iv|v)\s*$/,'')
+  .replace(/\s/g,'');
 
 /* ============================ PERSIST ============================ */
 function save(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
@@ -563,13 +598,31 @@ function load(){
 /* ============================ PLAYERS ============================ */
 function buildPlayers(){
   const rows = RAW.trim().split('\n').map(l=>l.split('|'));
+  const n = x => x===''||x==null ? null : +x;
   P = rows.map((r,i)=>({
     key: r[2]==='DEF' ? 'def_'+r[1] : norm(r[0])+'_'+r[2],
     name: r[0], team: r[1], pos: r[2],
     base: +r[3], proj: +r[3],
-    ecr: +r[4] || null, bye: +r[5] || null,
+    ecr: n(r[4]), bye: n(r[5]),
+    gm25:n(r[6]), ppg25:n(r[7]), boom25:n(r[8]), elite25:n(r[9]), ceil25:n(r[10]), sd25:n(r[11]),
+    gm24:n(r[12]), ppg24:n(r[13]), boom24:n(r[14]), ceil24:n(r[15]),
+    inj: r[16]||null, injBody: r[17]||null,
     idx: i
   }));
+  P.forEach(p=>{
+    // 2025 leads, 2024 informs; either alone is still usable
+    const b25=p.boom25, b24=p.boom24;
+    p.boomBlend = b25!=null && b24!=null ? 0.7*b25+0.3*b24 : (b25!=null?b25:b24);
+    p.ppg  = p.ppg25!=null ? p.ppg25 : p.ppg24;
+    p.ceil = p.ceil25!=null ? p.ceil25 : p.ceil24;
+    p.gm   = p.gm25 || 0;
+    p.hasHistory = p.boomBlend!=null && p.ppg!=null;
+  });
+  computeBoom();
+  ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
+    P.filter(p=>p.pos===pos).sort((a,b)=>(a.ecr||999)-(b.ecr||999))
+     .forEach((p,i)=> p.ecrPosRank = i+1);
+  });
   // scoring adjustment away from full PPR
   const recRate = {WR:0.28, TE:0.30, RB:0.15, QB:0, K:0, DEF:0};
   P.forEach(p=>{ p.proj = Math.round(p.base - (p.base*recRate[p.pos]||0)*(1-S.scoring)); });
@@ -581,6 +634,7 @@ function buildPlayers(){
       if(m){ if(m.team) p.team = m.team; p.mkt = m.rank; p.injury = m.injury; }
     });
   }
+  applyFormat();
   // VORP first — every downstream rank depends on it
   computeVorp();
   // offline ADP proxy: VORP plus a positional bias, since the market takes
@@ -600,7 +654,57 @@ function buildPlayers(){
   }
 }
 
+/* Spike-week value. Normalised inside each position: a weekly positional
+   top-12 finish is a far easier bar at QB (32 starters) than at WR, so a
+   cross-position boom score ranks backup quarterbacks above real players. */
+function computeBoom(){
+  ['QB','RB','WR','TE'].forEach(pos=>{
+    const list = P.filter(p=>p.pos===pos && p.hasHistory);
+    if(list.length < 5){ list.forEach(p=>p.bb=0); return; }
+    const z = f => {
+      const v = list.map(f), m = v.reduce((a,b)=>a+b,0)/v.length;
+      const sd = Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/v.length) || 1;
+      return x => (x-m)/sd;
+    };
+    const zb=z(p=>p.boomBlend), zc=z(p=>p.ceil), zg=z(p=>p.ppg);
+    list.forEach(p=>{
+      const raw = W.boom*zb(p.boomBlend) + W.ceil*zc(p.ceil) + W.ppg*zg(p.ppg);
+      // a short 2025 sample gets regressed toward neutral rather than trusted
+      p.bb = raw * Math.min(1, (p.gm||0)/MIN_GM);
+    });
+  });
+  // no NFL history (2026 rookies) is neutral, never a penalty
+  P.filter(p=>p.bb==null).forEach(p=> p.bb = 0);
+}
+
+/* Apply format to the consensus baseline.
+   The adjustment moves a player in RANK space and then hands out the
+   position's existing points curve in the new order. Scaling the points
+   directly instead would be worth +/-35% of 300 for an elite back and only
+   +/-35% of 100 for a bench one, which inflates the top of every position
+   and destroys the cross-position comparability that VORP depends on. */
+function applyFormat(){
+  const bb = S.mode==='bestball';
+  const sw = S.bbSwing==null ? BB_SWING_DEFAULT : S.bbSwing;
+  ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
+    const list = P.filter(p=>p.pos===pos);
+    if(!list.length) return;
+    const curve = list.map(p=>p.base).sort((a,b)=>b-a);
+    list.forEach(p=>{
+      const r = p.ecrPosRank || 999;
+      let shift = 0;
+      // room to move grows with rank: WR1 has nowhere to climb, WR50 does
+      if(bb && p.bb) shift = -sw * (6 + 0.30*r) * Math.max(-2, Math.min(2, p.bb));
+      if(p.inj) shift += INJ_SPOTS;
+      p._k = r + shift;
+    });
+    list.sort((a,b)=> a._k - b._k || (a.ecrPosRank||999) - (b.ecrPosRank||999));
+    list.forEach((p,i)=>{ p.proj = curve[i]; p.posDelta = (p.ecrPosRank||i+1) - (i+1); });
+  });
+}
+
 function computeVorp(){
+  const REPL = S.mode==='bestball' ? REPL_BESTBALL : REPL_REDRAFT;
   const rep = {};
   for(const pos in REPL){
     const list = P.filter(p=>p.pos===pos).sort((a,b)=>b.proj-a.proj);
@@ -779,7 +883,8 @@ function flexOpen(){
   return Math.max(0, STARTERS.FLEX - surplus);
 }
 
-const CAP = {QB:2, TE:2, K:1, DEF:1, RB:7, WR:8};
+const CAP_REDRAFT  = {QB:2, TE:2, K:1, DEF:1, RB:7, WR:8};
+const CAP_BESTBALL = {QB:2, TE:2, K:1, DEF:1, RB:8, WR:9};
 
 /* how many required lineup spots are still empty */
 function unfilledRequired(){
@@ -801,6 +906,8 @@ function isRequired(pos){
 /* 0 means "never draft him right now" */
 function needMult(pos){
   const c = counts();
+  const bb = S.mode==='bestball';
+  const CAP = bb ? CAP_BESTBALL : CAP_REDRAFT;
   if(c[pos] >= CAP[pos]) return 0;
   const picksLeft = S.slot ? myPickNumbers().filter(x=>x>=pickNo()).length : 99;
   const slack = picksLeft - unfilledRequired();   // spare picks beyond bare necessity
@@ -810,11 +917,12 @@ function needMult(pos){
     if(picksLeft <= 2) return 6;
     return 0;                                     // never before the last two rounds
   }
-  // In a 1QB / 1TE league the backup is nearly worthless — you stream the
-  // position off waivers — so he must lose to a bench RB/WR lottery ticket
-  // even when his own value over replacement is still positive.
-  if(pos==='QB' && c.QB >= 1) return 0.08;
-  if(pos==='TE' && c.TE >= 1) return 0.12;
+  // The second QB/TE is worth completely different things by format. In best
+  // ball the auto-lineup takes whichever quarterback booms that week, so QB2
+  // is a genuine roster spot; in redraft he rots on your bench while you
+  // stream the position off waivers.
+  if(pos==='QB' && c.QB >= 1) return bb ? (c.QB===1 ? 0.80 : 0.15) : 0.08;
+  if(pos==='TE' && c.TE >= 1) return bb ? (c.TE===1 ? 0.50 : 0.14) : 0.12;
   // running out of room: force the empty starting spots
   if(isRequired(pos)){
     if(slack <= 0) return 25;
@@ -828,7 +936,9 @@ function needMult(pos){
   if(pos==='QB' || pos==='TE') return 1.0;
   if(c[pos] < STARTERS[pos]) return 1.0;
   if(flexOpen() > 0) return 0.92;
-  return (c[pos] - STARTERS[pos]) <= 2 ? 0.6 : 0.32;
+  // best ball banks spike weeks from depth, so bench RB/WR keep real value
+  const depth = c[pos] - STARTERS[pos];
+  return bb ? (depth <= 3 ? 0.72 : 0.5) : (depth <= 2 ? 0.6 : 0.32);
 }
 
 /* ============================ ENGINE ============================ */
@@ -848,7 +958,9 @@ function scoreBoard(){
     // a negative-VORP player must get WORSE as need drops, not better —
     // so divide instead of multiply once value goes below replacement
     const base = p.vorp >= 0 ? p.vorp*need : p.vorp/Math.max(need,0.2);
-    let sc = base * (1 + 0.4*(1-surv));
+    // weight imminent loss harder: the market drafts WRs faster than pure
+    // value-over-replacement implies, and waiting loses the tier outright
+    let sc = base * (1 + 0.55*(1-surv));
     if(cliff) sc += 14*need;
     return {p, sc, surv, need, cliff, tierLeft:cohort.length};
   }).filter(Boolean).sort((a,b)=>b.sc-a.sc);
@@ -867,6 +979,9 @@ function reasonFor(e){
   else if(nxt && e.surv > 0.75 && e.need>0.5) bits.push(`likely still there at ${fmtPick(nxt)} (${Math.round(e.surv*100)}%) — you could wait`);
   const val = p.adp - pickNo();
   if(val >= 8) bits.push(`going <b>${val} picks later</b> than market on average`);
+  if(S.mode==='bestball' && p.boomBlend!=null && p.boomBlend>=45)
+    bits.push(`booms <b>${Math.round(p.boomBlend)}%</b> of weeks (${p.ceil} pt ceiling)`);
+  if(p.inj) bits.push(`<b style="color:var(--bad)">${esc(p.inj)}</b> — will miss time`);
   bits.push(`${p.vorp>0?'+':''}${p.vorp} pts over replacement`);
   return bits.join(' · ');
 }
@@ -1012,12 +1127,12 @@ function playerRow(p, extra){
   return `<div class="prow ${cls}" data-k="${p.key}">
     <span class="pos ${p.pos}">${p.pos}</span>
     <span class="pmid">
-      <span class="pn">${esc(p.name)}${p.injury?` <span class="inj">${esc(p.injury)}</span>`:''}</span>
-      <span class="pm">${p.team} · ${p.pos}${p.posRank} · Tier ${p.tier} · ADP ${p.adp}${p.bye?' · B'+p.bye:''}${st?` · ${st==='me'?'YOURS':'taken'}`:''}</span>
+      <span class="pn">${esc(p.name)}${(p.injury||p.inj)?` <span class="inj">${esc(p.injury||p.inj)}</span>`:''}</span>
+      <span class="pm">${p.team} · ${p.pos}${p.posRank} · Tier ${p.tier} · ADP ${p.adp}${p.bye?' · B'+p.bye:''}${p.posDelta>=8?` · <b style="color:var(--go)">▲${p.posDelta}</b>`:p.posDelta<=-8?` · <b style="color:var(--bad)">▼${-p.posDelta}</b>`:''}${st?` · ${st==='me'?'YOURS':'taken'}`:''}</span>
     </span>
     <span class="pr">
       <span class="pv ${p.vorp<0?'neg':''}">${v}</span>
-      <span class="ps">${extra||p.proj+' pts'}</span>
+      <span class="ps">${extra || (p.boomBlend!=null ? Math.round(p.boomBlend)+'% boom' : 'no history')}</span>
     </span>
   </div>`;
 }
@@ -1133,8 +1248,16 @@ function openSheet(key){
   const p = byKey[key]; if(!p) return;
   sheetKey = key;
   $('#shName').textContent = p.name;
-  $('#shSub').innerHTML = `${p.team} · ${p.pos} Tier ${p.tier} · ADP ${p.adp} · ${p.proj} proj · ${p.vorp>0?'+':''}${p.vorp} VOR`
-    + (S.taken[key] ? ` · <b style="color:var(--warn)">already ${S.taken[key]==='me'?'yours':'taken'}</b>` : '');
+  const bits = [`${p.team} · ${p.pos}${p.posRank} · Tier ${p.tier} · ADP ${p.adp}${p.bye?' · Bye '+p.bye:''}`];
+  if(p.boomBlend!=null){
+    bits.push(`<b>${Math.round(p.boomBlend)}%</b> weeks top-12 · <b>${Math.round(p.elite25||0)}%</b> top-5 · ${p.ppg} PPG · ${p.ceil} ceiling`);
+    if(p.gm && p.gm < MIN_GM) bits.push(`<span style="color:var(--warn)">Only ${p.gm} games in 2025 — small sample</span>`);
+    if(p.posDelta>=8) bits.push(`<span style="color:var(--go)">Spike-week data likes him ${p.posDelta} spots more than consensus</span>`);
+    if(p.posDelta<=-8) bits.push(`<span style="color:var(--bad)">Spike-week data likes him ${-p.posDelta} spots less than consensus</span>`);
+  } else bits.push('<span style="color:var(--warn)">No NFL history — consensus rank only</span>');
+  if(p.inj) bits.push(`<span style="color:var(--bad)">${esc(p.inj)}${p.injBody?' · '+esc(p.injBody):''} — expected to miss time</span>`);
+  if(S.taken[key]) bits.push(`<b style="color:var(--warn)">already ${S.taken[key]==='me'?'yours':'taken'}</b>`);
+  $('#shSub').innerHTML = bits.join('<br>');
   $('#veil').classList.add('on'); $('#sheet').classList.add('on');
 }
 function closeSheet(){ $('#veil').classList.remove('on'); $('#sheet').classList.remove('on'); sheetKey=null; }
@@ -1193,11 +1316,19 @@ $('#btnReset').onclick = ()=>{
   };
 });
 $('#cfgScoring').onchange = e=>{ S.scoring=parseFloat(e.target.value); save(); buildPlayers(); render(); };
+$('#cfgMode').onchange = e=>{ S.mode=e.target.value; save(); buildPlayers(); render(); };
+$('#cfgSwing').oninput = e=>{
+  S.bbSwing = +e.target.value/100; $('#bbVal').textContent = e.target.value+'%';
+  save(); buildPlayers(); render();
+};
 
 /* ============================ INIT ============================ */
 load();
 $('#cfgTeams').value=S.teams; $('#cfgRounds').value=S.rounds;
 $('#cfgSlot').value=S.slot||''; $('#cfgScoring').value=String(S.scoring);
+$('#cfgMode').value=S.mode;
+$('#cfgSwing').value=Math.round((S.bbSwing==null?0.35:S.bbSwing)*100);
+$('#bbVal').textContent=Math.round((S.bbSwing==null?0.35:S.bbSwing)*100)+'%';
 if(S.ecr&&S.ecr.length) $('#ecrPaste').value = S.ecr.map(r=>`${r.rank}. ${r.name}${r.team?' ('+r.team+(r.pos?' - '+r.pos:'')+')':''}`).join('\n');
 buildPlayers();
 render();
