@@ -225,6 +225,16 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
       <div class="hint">Starters: QB · RB · RB · WR · WR · TE · FLEX · FLEX · K · DEF</div>
     </div>
     <div class="card">
+      <div class="lbl">Seed with consensus rankings</div>
+      <div class="hint" style="margin:0 0 9px">Paste any ranking list — FantasyPros consensus, Sleeper, anywhere. Almost any format works. This <b>replaces the built-in order</b> and adds players the app doesn't know about.</div>
+      <textarea id="ecrPaste" rows="5" placeholder="1. Ja'Marr Chase (CIN - WR)&#10;2. Bijan Robinson (ATL - RB)&#10;3. Justin Jefferson (MIN - WR)&#10;..." style="width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px;color:var(--tx);font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none;resize:vertical"></textarea>
+      <div class="row2" style="margin-top:8px">
+        <button class="btn pri" id="btnLoadEcr">Load rankings</button>
+        <button class="btn" id="btnClearEcr">Clear</button>
+      </div>
+      <div class="hint" id="ecrMsg"></div>
+    </div>
+    <div class="card">
       <div class="lbl">Player data</div>
       <button class="btn" id="btnRefreshPlayers" style="width:100%">Refresh players from Sleeper</button>
       <div class="hint" id="dataMsg"></div>
@@ -549,6 +559,10 @@ function buildPlayers(){
   }
   computeTiers();
   byKey = {}; P.forEach(p=> byKey[p.key]=p);
+  if(S.ecr && S.ecr.length){
+    S.lastEcr = applyEcr(S.ecr);
+    byKey = {}; P.forEach(p=> byKey[p.key]=p);
+  }
 }
 
 function computeVorp(){
@@ -574,6 +588,104 @@ function computeTiers(){
       p.tier = t;
     });
   });
+}
+
+/* ==================== CONSENSUS RANKING IMPORT ====================
+   Reassigns each position's existing points curve in the order the pasted
+   list gives, so consensus sets the ORDER while the scale that drives
+   VORP, replacement level and tiers stays intact. Players the built-in
+   board has never heard of get added and slotted into the same curve. */
+const TEAMS = ('ARI ATL BAL BUF CAR CHI CIN CLE DAL DEN DET GB HOU IND JAX KC LV LAC LAR '+
+  'MIA MIN NE NO NYG NYJ PHI PIT SEA SF TB TEN WAS').split(' ');
+const TEAMALIAS = {JAC:'JAX', WSH:'WAS', WFT:'WAS', LA:'LAR', OAK:'LV', SD:'LAC', STL:'LAR', ARZ:'ARI', BLT:'BAL', CLV:'CLE', HST:'HOU'};
+const DEFNAME = {ARI:'Arizona',ATL:'Atlanta',BAL:'Baltimore',BUF:'Buffalo',CAR:'Carolina',CHI:'Chicago',
+  CIN:'Cincinnati',CLE:'Cleveland',DAL:'Dallas',DEN:'Denver',DET:'Detroit',GB:'Green Bay',HOU:'Houston',
+  IND:'Indianapolis',JAX:'Jacksonville',KC:'Kansas City',LV:'Las Vegas',LAC:'LA Chargers',LAR:'LA Rams',
+  MIA:'Miami',MIN:'Minnesota',NE:'New England',NO:'New Orleans',NYG:'NY Giants',NYJ:'NY Jets',
+  PHI:'Philadelphia',PIT:'Pittsburgh',SEA:'Seattle',SF:'San Francisco',TB:'Tampa Bay',TEN:'Tennessee',WAS:'Washington'};
+const NICK = {cardinals:'ARI',falcons:'ATL',ravens:'BAL',bills:'BUF',panthers:'CAR',bears:'CHI',bengals:'CIN',
+  browns:'CLE',cowboys:'DAL',broncos:'DEN',lions:'DET',packers:'GB',texans:'HOU',colts:'IND',jaguars:'JAX',
+  chiefs:'KC',raiders:'LV',chargers:'LAC',rams:'LAR',dolphins:'MIA',vikings:'MIN',patriots:'NE',saints:'NO',
+  giants:'NYG',jets:'NYJ',eagles:'PHI',steelers:'PIT',seahawks:'SEA',fortyniners:'SF',niners:'SF',
+  buccaneers:'TB',bucs:'TB',titans:'TEN',commanders:'WAS'};
+
+function parseRankings(text){
+  const out = [];
+  text.split(/\r?\n/).forEach(raw=>{
+    let l = raw.trim();
+    if(!l) return;
+    if(/^(rank|player|pos|team|tier|bye|notes|ecr|adp)\b/i.test(l) && l.length < 60) return;  // header row
+    l = l.replace(/^[#\s]*\d{1,3}(?:\s*[.):,|\t-]\s*|\s+)/, '');   // leading rank, any separator
+    l = l.replace(/\((\d{1,3})\)/g, ' ');                     // trailing "(12)"
+    let pos = null, team = null;
+    const pm = l.match(/\b(QB|RB|WR|TE|K|PK|DST|D\/ST|DEF)\s*\d{0,3}\b/i);
+    if(pm){ pos = pm[1].toUpperCase().replace('PK','K').replace('D/ST','DEF').replace('DST','DEF');
+            l = l.replace(pm[0], ' '); }
+    // a standalone number is a bye week, tier or leftover rank — never part of a name
+    const parts = l.split(/[\s,()\[\]|\t]+/).filter(x=>x && !/^\d{1,3}$/.test(x));
+    for(let i=parts.length-1; i>=0; i--){
+      const u = parts[i].toUpperCase().replace(/[^A-Z]/g,'');
+      const t = TEAMALIAS[u] || u;
+      if(TEAMS.includes(t)){ team = t; parts.splice(i,1); break; }
+    }
+    let name = parts.join(' ').replace(/[-–—•*]+/g,' ').replace(/\s+/g,' ').trim();
+    if(!name) return;
+    if(pos==='DEF' || /\bd\/?st\b|\bdefense\b/i.test(raw)){
+      pos = 'DEF';
+      const nk = name.toLowerCase().replace(/[^a-z]/g,'');
+      for(const k in NICK) if(nk.includes(k)){ team = NICK[k]; break; }
+      if(team) name = DEFNAME[team] || name;
+    }
+    if(name.length < 2 || name.length > 40) return;
+    out.push({name, team, pos, rank: out.length+1});
+  });
+  return out;
+}
+
+/* the points curve a position holds today, extended if the import is longer */
+function curveFor(pos, n){
+  const base = P.filter(p=>p.pos===pos).map(p=>p.base).sort((a,b)=>b-a);
+  if(!base.length) return Array(n).fill(50);
+  const out = base.slice(0, n);
+  const step = base.length>1 ? Math.max(3, base[base.length-2]-base[base.length-1]) : 5;
+  while(out.length < n) out.push(Math.max(15, out[out.length-1] - step));
+  return out;
+}
+
+function applyEcr(list){
+  if(!list || !list.length) return {matched:0, added:0, skipped:0};
+  let matched=0, added=0, skipped=0;
+  const full = list.length >= 50;   // a real cheat sheet, not a handful of names
+  // 1. attach ranks to players we already have; create the ones we don't
+  list.forEach(r=>{
+    const guesses = r.pos ? [norm(r.name)+'_'+r.pos]
+                          : ['QB','RB','WR','TE','K','DEF'].map(x=>norm(r.name)+'_'+x);
+    let hit = guesses.map(k=>byKey[k]).find(Boolean);
+    if(hit){ hit.ecr = r.rank; if(r.team) hit.team = r.team; matched++; return; }
+    if(!r.pos){ skipped++; return; }                       // nothing to slot it into
+    const np = {key: norm(r.name)+'_'+r.pos, name:r.name, team:r.team||'FA',
+                pos:r.pos, base:0, proj:0, ecr:r.rank, added:true};
+    P.push(np); byKey[np.key] = np; added++;
+  });
+  // 2. within each position, hand out the points curve in consensus order
+  ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
+    const ranked = P.filter(p=>p.pos===pos && p.ecr).sort((a,b)=>a.ecr-b.ecr);
+    if(ranked.length < 3) return;
+    const curve = curveFor(pos, ranked.length);
+    ranked.forEach((p,i)=>{ p.proj = curve[i]; p.base = curve[i]; });
+    // only a substantial list is treated as authoritative enough to
+    // push everyone it left out below everyone it included
+    if(full) P.filter(p=>p.pos===pos && !p.ecr).forEach(p=>{
+      p.proj = Math.min(p.proj, curve[curve.length-1] - 1);
+    });
+  });
+  computeVorp();
+  // consensus order IS the market, so it drives pick-timing too
+  const all = P.filter(p=>p.ecr).sort((a,b)=>a.ecr-b.ecr);
+  all.forEach((p,i)=> p.adp = i+1);
+  P.filter(p=>!p.ecr).forEach(p=> p.adp = all.length + (p.myRank||99));
+  computeTiers();
+  return {matched, added, skipped, full};
 }
 
 /* ============================ DRAFT MATH ============================ */
@@ -1003,6 +1115,21 @@ $('#btnFindLeagues').onclick = findLeagues;
 $('#btnStopSync').onclick = ()=>{ stopPoll(); $('#syncMsg').textContent='Sync stopped — you are in manual mode.'; };
 $('#btnUseDraftId').onclick = ()=>{ const v=$('#draftId').value.trim(); if(v) connectDraft(v); };
 $('#btnRefreshPlayers').onclick = ()=> loadSleeperPlayers(true);
+$('#btnLoadEcr').onclick = ()=>{
+  const txt = $('#ecrPaste').value;
+  const list = parseRankings(txt);
+  if(list.length < 5){ $('#ecrMsg').textContent = "Couldn't read that — needs one player per line, e.g. \"1. Ja'Marr Chase (CIN - WR)\"."; return; }
+  S.ecr = list; save();
+  buildPlayers(); render();
+  const r = S.lastEcr || {};
+  $('#ecrMsg').innerHTML = `Loaded <b>${list.length}</b> ranks — ${r.matched} matched, ${r.added} new player${r.added===1?'':'s'} added${r.skipped?`, ${r.skipped} skipped (no position given)`:''}. The board is now in consensus order.`
+    + (r.full ? '' : ' <b style="color:var(--warn)">Only ' + list.length + ' names — paste 150+ for a full board, otherwise everyone you left out keeps the built-in ranking.</b>');
+};
+$('#btnClearEcr').onclick = ()=>{
+  delete S.ecr; save(); $('#ecrPaste').value='';
+  buildPlayers(); render();
+  $('#ecrMsg').textContent = 'Back to the built-in board.';
+};
 $('#btnUndo').onclick = undo;
 $('#btnReset').onclick = ()=>{
   if(!confirm('Wipe all picks and start over?')) return;
@@ -1023,6 +1150,7 @@ $('#cfgScoring').onchange = e=>{ S.scoring=parseFloat(e.target.value); save(); b
 load();
 $('#cfgTeams').value=S.teams; $('#cfgRounds').value=S.rounds;
 $('#cfgSlot').value=S.slot||''; $('#cfgScoring').value=String(S.scoring);
+if(S.ecr&&S.ecr.length) $('#ecrPaste').value = S.ecr.map(r=>`${r.rank}. ${r.name}${r.team?' ('+r.team+(r.pos?' - '+r.pos:'')+')':''}`).join('\n');
 buildPlayers();
 render();
 loadSleeperPlayers(false);

@@ -71,20 +71,36 @@ with a legal, complete 16-man roster and no empty starting spots.
 
 ---
 
-## About the rankings
+## Seed it with real consensus rankings (do this)
 
-Two sources, and it's worth knowing which is which:
+The built-in projections are my own estimates and my knowledge stops in **May 2026** — so
+they carry no August camp news, injuries or holdouts. Fix that in about a minute:
 
-- **Player pool, NFL teams, injury tags, and market rank (ADP)** come **live from Sleeper**
-  when sync is on. That data is current as of whenever you open the app.
-- **Projected points** are a built-in baseline board. They are my own estimates and they
-  are the part to sanity-check — if you disagree with a player, trust yourself over the
-  number.
+1. Get a consensus PPR list — ask a Claude chat with web access for "the top 200 FantasyPros
+   consensus PPR rankings as plain text, one player per line with team and position", or copy
+   the table straight off their free rankings page.
+2. **Setup → Seed with consensus rankings** → paste → **Load rankings**.
 
-If Sleeper is unreachable the app falls back to a built-in ADP estimate and keeps working;
-nothing breaks, the timing advice just gets a little coarser.
+Almost any format parses — tab-separated table copy, `1. Ja'Marr Chase (CIN - WR)`,
+`1 Chase CIN WR`, or CSV. Bye-week and tier columns are ignored, and `Ravens D/ST`
+resolves to the Baltimore defense.
 
----
+**What it does with the list.** It reassigns each position's existing points curve in
+consensus order. Consensus sets *who ranks where*; the points scale that drives value over
+replacement, replacement level and tier breaks stays intact — so you get their opinion
+without losing the engine. Consensus order also becomes the ADP that powers pick timing.
+
+**It adds players I've never heard of.** Anyone in your list that isn't on the built-in
+board gets created with their team, position and a projection slotted into the curve at
+their consensus rank. Verified: a 200-line import matched 185 and added 15 unknown players,
+who then showed up as legitimate starters in simulated drafts. This is what closes the gap
+on rookies and post-cutoff moves.
+
+Paste 150+ names for a full board. With a short list the app says so and leaves everyone you
+omitted on the built-in ranking rather than burying them.
+
+Player pool, NFL teams, injury tags and market rank still come **live from Sleeper** when
+sync is on, regardless.
 
 ## Files
 
