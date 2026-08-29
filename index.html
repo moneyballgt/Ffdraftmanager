@@ -217,6 +217,18 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
     </div>
   </section>
 
+  <!-- ============ ROOM ============ -->
+  <section id="vRoom" hidden>
+    <div class="card">
+      <div class="lbl">Picking before your next turn</div>
+      <div id="roomNext"></div>
+    </div>
+    <div class="card">
+      <div class="lbl">Every team</div>
+      <div id="roomAll"></div>
+    </div>
+  </section>
+
   <!-- ============ SETUP ============ -->
   <section id="vSetup" hidden>
     <div class="card">
@@ -247,8 +259,16 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
         <option value="bestball">Best ball — auto lineup, ceiling wins</option>
         <option value="redraft">Redraft — you set the lineup weekly</option>
       </select>
-      <div class="hint" style="margin-top:12px">Boom influence — <b id="bbVal">35%</b></div>
-      <input id="cfgSwing" type="range" min="0" max="60" step="5" value="35"
+      <div class="hint" style="margin-top:12px">Replacement baseline</div>
+      <select id="cfgRepl" style="margin-top:5px">
+        <option value="A">A — Consensus-tracking (recommended)</option>
+        <option value="B">B — Weekly-starter (RB-heavy)</option>
+        <option value="C">C — Roster-depth (RB/WR only)</option>
+      </select>
+      <div class="hint" style="margin-top:2px">Which player counts as freely available. A builds
+      about 4 RB / 6 WR, B about 5.8 RB / 4.2 WR, C pushes TE and QB out of the early rounds.</div>
+      <div class="hint" style="margin-top:12px">Boom influence — <b id="bbVal">20%</b></div>
+      <input id="cfgSwing" type="range" min="0" max="60" step="5" value="20"
         style="width:100%;padding:0;margin-top:6px;accent-color:var(--go);background:none;border:none">
       <div class="hint" style="margin-top:2px">0% = pure expert consensus. Higher lets 2024-25 spike-week
       rates move players within their position. The data is backward-looking, so it says nothing about
@@ -291,6 +311,7 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
   <button data-v="Pick" class="on"><span class="ic">🎯</span>Pick</button>
   <button data-v="Board"><span class="ic">📋</span>Board</button>
   <button data-v="Roster"><span class="ic">👥</span>Roster</button>
+  <button data-v="Room"><span class="ic">🏟</span>Room</button>
   <button data-v="Setup"><span class="ic">⚙️</span>Setup</button>
 </nav>
 
@@ -314,6 +335,8 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
    Schema: Name|TEAM|POS|proj|ECR|Bye|Gm25|PPG25|Boom25|Elite25|Ceil25|SD25|Gm24|PPG24|Boom24|Ceil24|Injury|BodyPart
    Boom/Elite = share of weeks finishing top-12 / top-5 at the position (nflverse).
    Blank boom columns = no NFL history (2026 rookies) — treated as neutral, never penalised.
+   Rashid Shaheed legitimately shows 18 games: traded NO->SEA in week 10 and
+   caught both clubs' byes from the other side. Do not "correct" it to 17.
    ======================================================================= */
 const RAW = `
 Ja'Marr Chase|CIN|WR|330|1|6|16|19.6|56.2|43.8|38.1|10.3|17|23.7|58.8|55.4||
@@ -458,7 +481,7 @@ C.J. Stroud|HOU|QB|290|139|8|14|14.9|28.6|7.1|28.8|6.5|17|13.0|11.8|23.5||
 Daniel Jones|IND|QB|285|140|13|13|17.4|53.8|23.1|29.5|7.1|10|13.5|40|24.4||
 Deebo Samuel Sr.|SF|WR|145|141|8|16|11.8|25|6.2|23.6|6.9|15|10.4|20|25.1||
 Dylan Sampson|CLE|RB|115|142|11|15|5.8|13.3|0|17.3|5.6||||||
-Rashid Shaheed|SEA|WR|145|143|11|17|8.7|5.9|0.0|21.4|5.8|6|13.6|0|20.9||
+Rashid Shaheed|SEA|WR|145|143|11|18|8.7|5.6|0|21.4|5.8|6|13.6|0|20.9||
 Keaton Mitchell|LAC|RB|115|144|7|13|4.3|0|0|11.1|3.3|4|1.7|0|5.8||
 Denzel Boston|CLE|WR|140|145|11||||||||||||
 Cam Ward|TEN|QB|285|146|9|17|11.0|11.8|5.9|23.9|5.4||||||
@@ -581,11 +604,20 @@ const REPL_REDRAFT  = {QB:13, RB:31, WR:38, TE:13, K:13, DEF:13};
    to RB/WR. Pushing the QB baseline deep inflates every quarterback's value
    over replacement and buries the rest of the roster. */
 const REPL_BESTBALL = {QB:14, RB:33, WR:42, TE:15, K:13, DEF:13};
+/* Three defensible baselines. A tracks consensus and builds RB4/WR6; B counts
+   only weekly starters and builds RB5.8/WR4.2, thin for a 2WR+2FLEX PPR
+   lineup; C counts everyone rostered and pushes tight ends and quarterbacks
+   out of the early rounds entirely. */
+const REPL_SETS = {
+  A: {QB:14, RB:33, WR:42, TE:15, K:13, DEF:13},
+  B: {QB:12, RB:34, WR:35, TE:14, K:13, DEF:13},
+  C: {QB:26, RB:56, WR:76, TE:26, K:13, DEF:13}
+};
 /* Boom-score weights, from the Inputs tab of the draft board workbook. */
 const W = {boom:0.45, ceil:0.25, ppg:0.30, cv:0.22};   // cv = best ball only
 const MIN_GM = 8;
 const BB_UNIT = 0.58;   // pooled residual SD, so all positions share one scale        // below this, spike-week rate is low-sample and gets regressed
-const BB_SWING_DEFAULT = 0.35;  // how far a boom profile may move a player's value
+const BB_SWING_DEFAULT = 0.20;  // how far a boom profile may move a player's value
 const VAL_FLOOR = 90;    // points below replacement still worth something
 const INJ_SPOTS = 7;     // positional spots to dock a player expected to miss time
 const SIGMA = 8;              // ADP noise, in picks
@@ -593,7 +625,7 @@ const LS = 'draftroom.v2';
 
 /* ============================ STATE ============================ */
 let S = {
-  teams:12, rounds:16, slot:null, scoring:1, mode:'bestball', bbSwing:0.35,
+  teams:12, rounds:16, slot:null, scoring:1, mode:'bestball', bbSwing:0.20, repl:'A',
   taken:{},          // key -> 'me' | 'them'
   manual:[],         // hand-entered picks, preserved across sync rebuilds
   order:[],          // [{key,by,pick}] chronological
@@ -787,7 +819,7 @@ function applyFormat(){
 }
 
 function computeVorp(){
-  const REPL = S.mode==='bestball' ? REPL_BESTBALL : REPL_REDRAFT;
+  const REPL = S.mode==='bestball' ? (REPL_SETS[S.repl] || REPL_BESTBALL) : REPL_REDRAFT;
   const rep = {};
   for(const pos in REPL){
     const list = P.filter(p=>p.pos===pos).sort((a,b)=>b.proj-a.proj);
@@ -948,19 +980,117 @@ function pickAfterNext(){ const n=pickNo(); return myPickNumbers().filter(x=>x>=
 const onClock = () => S.slot && slotOnClock(pickNo()) === S.slot;
 
 /* survival probability at a future pick number */
-function survival(p, atPick){
-  if(!atPick) return 1;
+/* ======================= MODEL OF THE ROOM =======================
+   Who actually picks before your next turn, and what they still need.
+
+   A rank curve assumes the four teams ahead of you draft off a generic
+   board. They don't. A team with no quarterback and two rounds left takes
+   a quarterback, and every receiver slides past them to you. Conditioning
+   on each intervening team's real roster is the difference between "38%"
+   and knowing he comes back.
+
+   The model is also self-consistent in a way the rank curve was not: the
+   per-position weights are normalised, and each player's share within his
+   position sums to one, so the expected number of players consumed over N
+   intervening picks is exactly N. The logistic expected 9.1 over 12. */
+const TAU = 10;  // how tightly a team converges on the top man at a position;
+                 // 6 made every room behave like a machine picking strictly in order
+
+/* Rosters by draft slot. Works with or without Sleeper: in a snake the slot
+   is recoverable from the pick number, and Sleeper's draft_slot overrides
+   it when a league has a custom order. */
+function roomNeeds(){
+  const R = {};
+  for(let s=1; s<=S.teams; s++) R[s] = {QB:0,RB:0,WR:0,TE:0,K:0,DEF:0,n:0,names:[]};
+  S.order.forEach(o=>{
+    const p = byKey[o.key]; if(!p) return;
+    const s = o.slot || slotOnClock(o.pick);
+    if(!R[s]) return;
+    R[s][p.pos]++; R[s].n++; R[s].names.push(p);
+  });
+  return R;
+}
+
+/* What a team with this roster is shopping for. */
+function teamAppetite(c, roundsLeft){
+  const bb = S.mode === 'bestball';
+  const w = {};
+  ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
+    let v;
+    if(pos==='K' || pos==='DEF')  v = c[pos] >= 1 ? 0 : (roundsLeft <= 2 ? 4 : 0.02);
+    else if(pos==='QB')           v = c.QB===0 ? (roundsLeft<=4 ? 3 : 1) : (bb && c.QB===1 ? 0.5 : 0.05);
+    else if(pos==='TE')           v = c.TE===0 ? (roundsLeft<=4 ? 3 : 1) : (bb && c.TE===1 ? 0.35 : 0.05);
+    else {
+      const start = STARTERS[pos];
+      v = c[pos] < start ? 1.0 : (c[pos] < start + 2 ? 0.7 : 0.35);
+    }
+    w[pos] = v;
+  });
+  return w;
+}
+
+let _room = null;
+function buildRoom(atPick){
+  const now = pickNo();
+  if(!atPick || atPick <= now) return null;
+  const R = roomNeeds(), avail = available();
+  const byPos = {};
+  avail.forEach(p=>{ (byPos[p.pos] = byPos[p.pos]||[]).push(p); });
+
+  // Raw appetite for each player within his own position: a team takes the
+  // best man on the board most of the time, not always.
+  const w0 = {};
+  for(const pos in byPos){
+    const list = byPos[pos];
+    const best = Math.min(...list.map(p=>p.mktRank||p.adp));
+    list.forEach(p=> w0[p.key] = Math.exp(-(((p.mktRank||p.adp) - best))/TAU));
+  }
+
+  /* Walk the intervening picks IN ORDER, removing probability mass as it is
+     consumed. Without this depletion two different teams can both "take" the
+     same player and the model loses count — it expected only 7.6 players
+     gone across 12 real picks. Renormalising by who is still likely
+     available makes each pick consume exactly one player, so the total is
+     exact by construction. */
+  const alive = {}; avail.forEach(p=> alive[p.key] = 1);
+  const steps = [];
+  for(let k = now; k < atPick; k++){
+    const s = slotOnClock(k);
+    const c = R[s] || {QB:0,RB:0,WR:0,TE:0,K:0,DEF:0,n:0};
+    const raw = teamAppetite(c, S.rounds - c.n);
+    let tot = 0;
+    for(const pos in raw) if(byPos[pos] && byPos[pos].length) tot += raw[pos];
+    const w = {};
+    for(const pos in raw) w[pos] = tot ? raw[pos]/tot : 0;
+
+    for(const pos in byPos){
+      if(!w[pos]) continue;
+      let denom = 0;
+      byPos[pos].forEach(p=> denom += w0[p.key] * alive[p.key]);
+      if(denom <= 1e-9) continue;
+      byPos[pos].forEach(p=>{
+        const q = w[pos] * (w0[p.key] * alive[p.key]) / denom;   // P(taken here)
+        alive[p.key] = Math.max(0, alive[p.key] - q);
+      });
+    }
+    steps.push({slot:s, w, need:c});
+  }
+  return {at:atPick, now, steps, alive, rosters:R};
+}
+
+function rankSurvival(p, atPick){
   const r = p.mktRank || p.adp;
-  // Dispersion grows with rank: round-one picks are near-deterministic, late
-  // ones scatter. One fixed sigma was overconfident early, underconfident late.
   const sig = 3 + 0.18*r;
   const raw = t => 1 - 1/(1+Math.exp(-(t-r)/sig));
-  // Condition on him being available NOW. Unconditionally, a player who has
-  // already slid past his rank reads as almost certainly gone while he is
-  // sitting right there — understated by up to 40x, and that is exactly the
-  // population the "he'll come back to me" call is about.
   const now = Math.max(1e-6, raw(pickNo()));
   return Math.max(0, Math.min(1, raw(atPick)/now));
+}
+
+function survival(p, atPick){
+  if(!atPick) return 1;
+  const rm = _room;
+  if(rm && rm.at === atPick && rm.alive[p.key] != null) return rm.alive[p.key];
+  return rankSurvival(p, atPick);
 }
 
 /* ============================ ROSTER ============================ */
@@ -1087,6 +1217,7 @@ function expectedNext(pool, excludeKey){
    star at another position swamps the comparison and washes the signal out. */
 function scoreBoard(){
   const nxt = pickAfterNext();
+  _room = buildRoom(nxt);
   const avail = available();
   const byPos = {};
   avail.forEach(p=>{ (byPos[p.pos] = byPos[p.pos]||[]).push(p); });
@@ -1172,7 +1303,7 @@ function runAlert(){
 /* ============================ ACTIONS ============================ */
 function take(key, by){
   if(S.taken[key]) return;
-  const rec = {key, by, pick: pickNo()};
+  const rec = {key, by, pick: pickNo(), slot: slotOnClock(pickNo())};
   S.taken[key] = by;
   S.order.push(rec);
   // Sleeper is rebuilt from scratch every poll, so a hand-entered pick has to
@@ -1297,7 +1428,7 @@ async function pullPicks(){
       const nm  = pos==='DEF' ? (md.team||md.first_name||'') : `${md.first_name||''} ${md.last_name||''}`;
       const key = pos==='DEF' ? 'def_'+(md.team||pk.player_id) : norm(nm)+'_'+pos;
       const mine = S.slot && slotOnClock(pk.pick_no)===S.slot;
-      S.order.push({key, by: mine?'me':'them', pick: pk.pick_no});
+      S.order.push({key, by: mine?'me':'them', pick: pk.pick_no, slot: pk.draft_slot || slotOnClock(pk.pick_no)});
       S.taken[key] = mine?'me':'them';
     });
     // re-apply anything entered by hand that Sleeper does not know about
@@ -1469,6 +1600,36 @@ function renderRoster(){
   }).join('');
 }
 
+function renderRoom(){
+  const R = roomNeeds(), nxt = nextMyPick(), after = pickAfterNext();
+  const line = (s2,c,tag)=>{
+    const gaps = [];
+    ['QB','RB','WR','TE'].forEach(pos=>{
+      const short = (STARTERS[pos]||0) - c[pos];
+      if(short > 0) gaps.push(`${short} ${pos}`);
+    });
+    return `<div class="slot" style="${s2===S.slot?'background:#13251c;':''}">
+      <span class="slotn">${s2===S.slot?'YOU':'#'+s2}</span>
+      <span class="slotp" style="font-weight:400;font-size:13px">
+        <b style="font-weight:700">${c.n}</b> picks ·
+        QB${c.QB} RB${c.RB} WR${c.WR} TE${c.TE}${c.K?' K':''}${c.DEF?' D':''}
+        ${gaps.length?`<span style="color:var(--warn)"> · needs ${gaps.join(', ')}</span>`
+                     :'<span style="color:var(--go)"> · starters full</span>'}
+      </span>${tag||''}</div>`;
+  };
+  const between = [];
+  if(nxt != null && after != null){
+    for(let k = Math.max(pickNo(), nxt+1); k < after; k++) between.push({k, s:slotOnClock(k)});
+  }
+  $('#roomNext').innerHTML = between.length
+    ? between.map(x=>line(x.s, R[x.s]||{QB:0,RB:0,WR:0,TE:0,K:0,DEF:0,n:0},
+        `<span class="ps">${fmtPick(x.k)}</span>`)).join('')
+      + `<div class="hint">These are the teams that decide whether a player comes back to you. Their needs drive every survival figure in the app.</div>`
+    : `<div class="empty">Set your draft slot to see who picks before your next turn.</div>`;
+  $('#roomAll').innerHTML = Object.keys(R).map(k=>+k).sort((a,b)=>a-b)
+    .map(s2=>line(s2, R[s2])).join('');
+}
+
 function render(){
   if(!P.length) return;
   renderHeader();
@@ -1476,6 +1637,7 @@ function render(){
   if(view==='Pick') renderPick();
   if(view==='Board') renderBoard();
   if(view==='Roster') renderRoster();
+  if(view==='Room') renderRoom();
 }
 
 /* ============================ SHEET ============================ */
@@ -1517,7 +1679,7 @@ document.addEventListener('click', e=>{
   if(nav){
     view = nav.dataset.v;
     document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b===nav));
-    ['Pick','Board','Roster','Setup'].forEach(v=> $('#v'+v).hidden = v!==view);
+    ['Pick','Board','Roster','Room','Setup'].forEach(v=> $('#v'+v).hidden = v!==view);
     render(); window.scrollTo(0,0); return;
   }
   const chip = e.target.closest('.chip');
@@ -1571,6 +1733,7 @@ $('#btnReset').onclick = ()=>{
 });
 // Scoring is a property of the pasted ranking source, not a knob.
 $('#cfgMode').onchange = e=>{ S.mode=e.target.value; save(); buildPlayers(); render(); };
+$('#cfgRepl').onchange = e=>{ S.repl=e.target.value; save(); buildPlayers(); render(); };
 $('#cfgSwing').oninput = e=>{
   S.bbSwing = +e.target.value/100; $('#bbVal').textContent = e.target.value+'%';
   save(); buildPlayers(); render();
@@ -1625,12 +1788,13 @@ load();
 $('#cfgTeams').value=S.teams; $('#cfgRounds').value=S.rounds;
 $('#cfgSlot').value=S.slot||''; $('#cfgScoring').value=String(S.scoring);
 $('#cfgMode').value=S.mode;
+$('#cfgRepl').value=S.repl||'A';
 if(S.awake){ $('#btnAwake').textContent='Let screen sleep'; keepAwake(true); } else keepAwake(false);
 $('#installHint').textContent = HOSTED
   ? 'Hosted: live Sleeper sync is available, and you can install this to your home screen from the browser menu so it opens full screen and works offline.'
   : 'Opened as a local file. Live Sleeper sync and home-screen install need this served over http(s).';
-$('#cfgSwing').value=Math.round((S.bbSwing==null?0.35:S.bbSwing)*100);
-$('#bbVal').textContent=Math.round((S.bbSwing==null?0.35:S.bbSwing)*100)+'%';
+$('#cfgSwing').value=Math.round((S.bbSwing==null?0.20:S.bbSwing)*100);
+$('#bbVal').textContent=Math.round((S.bbSwing==null?0.20:S.bbSwing)*100)+'%';
 if(S.ecr&&S.ecr.length) $('#ecrPaste').value = S.ecr.map(r=>`${r.rank}. ${r.name}${r.team?' ('+r.team+(r.pos?' - '+r.pos:'')+')':''}`).join('\n');
 buildPlayers();
 render();
