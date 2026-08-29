@@ -85,6 +85,30 @@ Not a static cheat sheet — it reacts to what has already happened.
   players at a spot you still need are nearly gone it stops saying wait. K and DEF are
   suppressed until the last two rounds, then forced.
 
+### The room, not a curve
+
+Survival is not a curve fitted to rank. It walks the actual teams picking before your next
+turn and asks what each still needs. A team with no quarterback and two rounds left takes a
+quarterback, and every receiver slides past them to you.
+
+Each intervening team gets a positional appetite from its real roster; each player gets a
+share within his own position. Probability is then consumed **sequentially** — without that,
+two teams can both "take" the same player and the model loses count (it expected 7.6 players
+gone across 12 real picks). Renormalising by who is still likely available makes each pick
+consume exactly one player, so the total is exact: 12.0 across 12.
+
+This works in manual entry too — in a snake the slot is recoverable from the pick number, and
+Sleeper's `draft_slot` overrides it for custom orders.
+
+**It also learns how your room drafts.** This league reaches for quarterbacks and tight ends
+earlier than value over replacement says it should, which is set as the starting assumption in
+Setup. It is then corrected against the picks as they land: for every pick, how far ahead of
+his market rank did that player go? Fed a room that hammers QB and TE, the model recovers it
+from the picks alone — 1.00x to 1.76x QB and 1.62x TE within 60 picks — and correspondingly
+learns that receivers and backs are sliding (0.70x). By the middle rounds the app is using
+what your league actually did rather than what you told it. The Room tab shows the current
+figures.
+
 ### Will he come back to you?
 
 The most valuable question in a snake draft is not who is best, it is who will still be

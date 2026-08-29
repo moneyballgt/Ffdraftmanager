@@ -214,6 +214,10 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
       <div id="roomNext"></div>
     </div>
     <div class="card">
+      <div class="lbl">What this room is reaching for</div>
+      <div id="roomLearn"></div>
+    </div>
+    <div class="card">
       <div class="lbl">Every team</div>
       <div id="roomAll"></div>
     </div>
@@ -249,6 +253,15 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
         <option value="bestball">Best ball — auto lineup, ceiling wins</option>
         <option value="redraft">Redraft — you set the lineup weekly</option>
       </select>
+      <div class="hint" style="margin-top:12px">How this room drafts</div>
+      <select id="cfgReach" style="margin-top:5px">
+        <option value="qbte">Reaches for QB and TE (this league)</option>
+        <option value="generic">Drafts close to the rankings</option>
+        <option value="strong">Reaches hard for QB and TE</option>
+      </select>
+      <div class="hint" style="margin-top:2px">Starting assumption only — it is corrected against
+      the picks as they come in, so by the middle rounds the app is using what your league
+      actually did rather than what you told it.</div>
       <div class="hint" style="margin-top:12px">Replacement baseline</div>
       <select id="cfgRepl" style="margin-top:5px">
         <option value="A">A — Consensus-tracking (recommended)</option>
@@ -615,7 +628,7 @@ const LS = 'draftroom.v2';
 
 /* ============================ STATE ============================ */
 let S = {
-  teams:12, rounds:16, slot:null, scoring:1, mode:'bestball', bbSwing:0.20, repl:'A',
+  teams:12, rounds:16, slot:null, scoring:1, mode:'bestball', bbSwing:0.20, repl:'A', reach:'qbte',
   taken:{},          // key -> 'me' | 'them'
   manual:[],         // hand-entered picks, preserved across sync rebuilds
   order:[],          // [{key,by,pick}] chronological
@@ -1001,8 +1014,53 @@ function roomNeeds(){
   return R;
 }
 
+/* ---- How this particular room drafts ----------------------------------
+   A generic appetite model assumes twelve managers who value positions the
+   way the rankings do. Real rooms don't. This one reaches for quarterbacks
+   and tight ends earlier than value over replacement says it should, which
+   changes two things at once: those players do not come back to you, and
+   the running backs and receivers other rooms would have taken slide
+   further than the market implies.
+
+   The prior below encodes that. It is then corrected against the draft as
+   it actually happens: for every pick made, how far ahead of his market
+   rank did that player go? Positive means the room reached. The observed
+   figure is shrunk toward the prior by sample size, so early picks nudge
+   rather than swing it. */
+const REACH_PRIOR = {
+  generic: {QB:1.00, RB:1.00, WR:1.00, TE:1.00},
+  qbte:    {QB:1.55, RB:0.94, WR:0.92, TE:1.45},   // this league
+  strong:  {QB:2.00, RB:0.88, WR:0.85, TE:1.85}
+};
+const REACH_K = 14;    // picks of reach that double a position's appetite
+const REACH_N = 10;    // observations before evidence outweighs the prior
+
+function roomBias(){
+  const prior = REACH_PRIOR[S.reach || 'qbte'] || REACH_PRIOR.generic;
+  const sum = {}, cnt = {};
+  S.order.forEach(o=>{
+    const p = byKey[o.key];
+    if(!p || !p.mktRank || p.pos==='K' || p.pos==='DEF') return;
+    sum[p.pos] = (sum[p.pos]||0) + (p.mktRank - o.pick);   // + = went early
+    cnt[p.pos] = (cnt[p.pos]||0) + 1;
+  });
+  const out = {}, obs = {};
+  ['QB','RB','WR','TE'].forEach(pos=>{
+    const n = cnt[pos] || 0;
+    if(!n){ out[pos] = prior[pos]; obs[pos] = null; return; }
+    const reach = sum[pos]/n;
+    obs[pos] = reach;
+    const measured = Math.max(0.55, Math.min(2.4, Math.exp(reach/REACH_K)));
+    const w = n/(n + REACH_N);                     // trust evidence gradually
+    out[pos] = prior[pos]*(1-w) + measured*w;
+  });
+  out.K = 1; out.DEF = 1;
+  out._obs = obs; out._n = cnt;
+  return out;
+}
+
 /* What a team with this roster is shopping for. */
-function teamAppetite(c, roundsLeft){
+function teamAppetite(c, roundsLeft, bias){
   const bb = S.mode === 'bestball';
   const w = {};
   ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
@@ -1014,7 +1072,7 @@ function teamAppetite(c, roundsLeft){
       const start = STARTERS[pos];
       v = c[pos] < start ? 1.0 : (c[pos] < start + 2 ? 0.7 : 0.35);
     }
-    w[pos] = v;
+    w[pos] = v * ((bias && bias[pos]) || 1);
   });
   return w;
 }
@@ -1024,6 +1082,7 @@ function buildRoom(atPick){
   const now = pickNo();
   if(!atPick || atPick <= now) return null;
   const R = roomNeeds(), avail = available();
+  const bias = roomBias();
   const byPos = {};
   avail.forEach(p=>{ (byPos[p.pos] = byPos[p.pos]||[]).push(p); });
 
@@ -1047,7 +1106,7 @@ function buildRoom(atPick){
   for(let k = now; k < atPick; k++){
     const s = slotOnClock(k);
     const c = R[s] || {QB:0,RB:0,WR:0,TE:0,K:0,DEF:0,n:0};
-    const raw = teamAppetite(c, S.rounds - c.n);
+    const raw = teamAppetite(c, S.rounds - c.n, bias);
     let tot = 0;
     for(const pos in raw) if(byPos[pos] && byPos[pos].length) tot += raw[pos];
     const w = {};
@@ -1065,7 +1124,7 @@ function buildRoom(atPick){
     }
     steps.push({slot:s, w, need:c});
   }
-  return {at:atPick, now, steps, alive, rosters:R};
+  return {at:atPick, now, steps, alive, rosters:R, bias};
 }
 
 function rankSurvival(p, atPick){
@@ -1616,6 +1675,21 @@ function renderRoom(){
         `<span class="ps">${fmtPick(x.k)}</span>`)).join('')
       + `<div class="hint">These are the teams that decide whether a player comes back to you. Their needs drive every survival figure in the app.</div>`
     : `<div class="empty">Set your draft slot to see who picks before your next turn.</div>`;
+  const bias = roomBias();
+  const rows = ['QB','RB','WR','TE'].map(pos=>{
+    const o = bias._obs[pos], n = bias._n[pos]||0;
+    const txt = n < 3 ? 'not enough picks yet'
+      : o > 2  ? `going <b>${o.toFixed(0)} picks early</b>`
+      : o < -2 ? `lasting <b>${(-o).toFixed(0)} picks longer</b> than ranked`
+      : 'drafting about on rank';
+    return `<div class="slot"><span class="pos ${pos}">${pos}</span>
+      <span class="slotp" style="font-weight:400;font-size:13px">${txt}
+      <span style="color:var(--faint)"> · ${n} picked</span></span>
+      <span class="ps">${bias[pos].toFixed(2)}x</span></div>`;
+  }).join('');
+  $('#roomLearn').innerHTML = rows +
+    `<div class="hint">Above 1.00 means this room wants that position more than the rankings do,
+     so those players will not come back to you. Below 1.00 means they slide.</div>`;
   $('#roomAll').innerHTML = Object.keys(R).map(k=>+k).sort((a,b)=>a-b)
     .map(s2=>line(s2, R[s2])).join('');
 }
@@ -1724,6 +1798,7 @@ $('#btnReset').onclick = ()=>{
 // Scoring is a property of the pasted ranking source, not a knob.
 $('#cfgMode').onchange = e=>{ S.mode=e.target.value; save(); buildPlayers(); render(); };
 $('#cfgRepl').onchange = e=>{ S.repl=e.target.value; save(); buildPlayers(); render(); };
+$('#cfgReach').onchange = e=>{ S.reach=e.target.value; save(); render(); };
 $('#cfgSwing').oninput = e=>{
   S.bbSwing = +e.target.value/100; $('#bbVal').textContent = e.target.value+'%';
   save(); buildPlayers(); render();
@@ -1779,6 +1854,7 @@ $('#cfgTeams').value=S.teams; $('#cfgRounds').value=S.rounds;
 $('#cfgSlot').value=S.slot||''; $('#cfgScoring').value=String(S.scoring);
 $('#cfgMode').value=S.mode;
 $('#cfgRepl').value=S.repl||'A';
+$('#cfgReach').value=S.reach||'qbte';
 if(S.awake){ $('#btnAwake').textContent='Let screen sleep'; keepAwake(true); } else keepAwake(false);
 $('#installHint').textContent = HOSTED
   ? 'Hosted: live Sleeper sync is available, and you can install this to your home screen from the browser menu so it opens full screen and works offline.'
