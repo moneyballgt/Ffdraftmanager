@@ -156,6 +156,7 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
   <!-- ============ PICK ============ -->
   <section id="vPick">
     <div id="alerts"></div>
+    <div id="waitNote"></div>
     <div class="card rec" id="recCard">
       <div class="lbl">Take him</div>
       <div class="recname" id="recName">—</div>
@@ -618,11 +619,11 @@ function buildPlayers(){
     p.gm   = p.gm25 || 0;
     p.hasHistory = p.boomBlend!=null && p.ppg!=null;
   });
-  computeBoom();
   ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
     P.filter(p=>p.pos===pos).sort((a,b)=>(a.ecr||999)-(b.ecr||999))
      .forEach((p,i)=> p.ecrPosRank = i+1);
   });
+  computeBoom();
   // scoring adjustment away from full PPR
   const recRate = {WR:0.28, TE:0.30, RB:0.15, QB:0, K:0, DEF:0};
   P.forEach(p=>{ p.proj = Math.round(p.base - (p.base*recRate[p.pos]||0)*(1-S.scoring)); });
@@ -646,6 +647,13 @@ function buildPlayers(){
   const ranked = P.filter(p=>p.mkt).sort((a,b)=>a.mkt-b.mkt);
   const mktRank = {}; ranked.forEach((p,i)=> mktRank[p.key] = i+1);
   P.forEach(p=> p.adp = p.ecr || mktRank[p.key] || p.myRank);
+  /* Survival must be modelled on the board your league is actually drafting
+     off. In a Sleeper league that is Sleeper's own stock ranking, not expert
+     consensus — the two disagree often, and the gap is exactly where value
+     hides: a player Sleeper ranks well above your board goes early, one it
+     ranks below comes back to you. */
+  P.forEach(p=> { p.sleeperRank = mktRank[p.key] || null;
+                  p.mktRank = p.sleeperRank || p.adp; });
   computeTiers();
   byKey = {}; P.forEach(p=> byKey[p.key]=p);
   if(S.ecr && S.ecr.length){
@@ -660,7 +668,7 @@ function buildPlayers(){
 function computeBoom(){
   ['QB','RB','WR','TE'].forEach(pos=>{
     const list = P.filter(p=>p.pos===pos && p.hasHistory);
-    if(list.length < 5){ list.forEach(p=>p.bb=0); return; }
+    if(list.length < 8){ list.forEach(p=>p.bb=0); return; }
     const z = f => {
       const v = list.map(f), m = v.reduce((a,b)=>a+b,0)/v.length;
       const sd = Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/v.length) || 1;
@@ -668,12 +676,29 @@ function computeBoom(){
     };
     const zb=z(p=>p.boomBlend), zc=z(p=>p.ceil), zg=z(p=>p.ppg);
     list.forEach(p=>{
-      const raw = W.boom*zb(p.boomBlend) + W.ceil*zc(p.ceil) + W.ppg*zg(p.ppg);
-      // a short 2025 sample gets regressed toward neutral rather than trusted
-      p.bb = raw * Math.min(1, (p.gm||0)/MIN_GM);
+      p._raw = W.boom*zb(p.boomBlend) + W.ceil*zc(p.ceil) + W.ppg*zg(p.ppg);
+    });
+
+    /* The experts already watch these players. Measured against this board,
+       consensus rank explains 48-71% of the boom composite depending on
+       position, so adding the raw score on top of consensus counts most of
+       it twice. Regress the composite on consensus rank and keep only the
+       RESIDUAL — what the spike-week record knows that the rankers did not
+       already price in. */
+    const n = list.length;
+    const xs = list.map(p=>p.ecrPosRank), ys = list.map(p=>p._raw);
+    const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+    let sxy=0, sxx=0;
+    for(let i=0;i<n;i++){ sxy += (xs[i]-mx)*(ys[i]-my); sxx += (xs[i]-mx)*(xs[i]-mx); }
+    const slope = sxx ? sxy/sxx : 0, intercept = my - slope*mx;
+    const res = list.map(p=> p._raw - (intercept + slope*p.ecrPosRank));
+    const rm = res.reduce((a,b)=>a+b,0)/n;
+    const rsd = Math.sqrt(res.reduce((a,b)=>a+(b-rm)*(b-rm),0)/n) || 1;
+    list.forEach((p,i)=>{
+      // rescale to unit variance so the slider means the same thing everywhere
+      p.bb = ((res[i]-rm)/rsd) * Math.min(1, (p.gm||0)/MIN_GM);
     });
   });
-  // no NFL history (2026 rookies) is neutral, never a penalty
   P.filter(p=>p.bb==null).forEach(p=> p.bb = 0);
 }
 
@@ -852,7 +877,7 @@ const onClock = () => S.slot && slotOnClock(pickNo()) === S.slot;
 /* survival probability at a future pick number */
 function survival(p, atPick){
   if(!atPick) return 1;
-  const gap = atPick - p.adp;
+  const gap = atPick - (p.mktRank || p.adp);
   return 1 - 1/(1+Math.exp(-gap/SIGMA));
 }
 
@@ -921,8 +946,12 @@ function needMult(pos){
   // ball the auto-lineup takes whichever quarterback booms that week, so QB2
   // is a genuine roster spot; in redraft he rots on your bench while you
   // stream the position off waivers.
-  if(pos==='QB' && c.QB >= 1) return bb ? (c.QB===1 ? 0.80 : 0.15) : 0.08;
-  if(pos==='TE' && c.TE >= 1) return bb ? (c.TE===1 ? 0.50 : 0.14) : 0.12;
+  if(pos==='QB' && c.QB >= 1)
+    return bb ? (c.QB===1 ? 0.80 : 0.15)
+              : (picksLeft <= 2 ? 0.30 : 0);   // redraft: stream QB, don't roster one
+  if(pos==='TE' && c.TE >= 1)
+    return bb ? (c.TE===1 ? 0.50 : 0.14)
+              : (picksLeft <= 3 ? 0.30 : 0.05);
   // running out of room: force the empty starting spots
   if(isRequired(pos)){
     if(slack <= 0) return 25;
@@ -942,28 +971,69 @@ function needMult(pos){
 }
 
 /* ============================ ENGINE ============================ */
+/* Expected best still on the board at your next turn, walking a pool
+   best-first: you land a given player only if he survives AND everyone
+   better is already gone, so his contribution is
+   value x P(survives) x P(all better ones taken). */
+function expectedNext(pool, excludeKey){
+  let acc = 0, allGone = 1;
+  for(const it of pool){
+    if(it.key === excludeKey) continue;
+    acc += it.v * it.s * allGone;
+    allGone *= (1 - it.s);
+    if(allGone < 0.002) break;
+  }
+  return acc;
+}
+
+/* What a pick actually costs you.
+
+   Taking a player also removes him from the pool you draw on next turn.
+   His MARGINAL contribution to that pool is what you forfeit by spending a
+   pick on him now, so the score is his value now minus what he was worth to
+   you later. Someone the room will take before your next turn contributes
+   almost nothing to that pool and so costs nothing to take — you get his
+   full value. Someone who would have slid back to you is largely a wasted
+   pick, because you could have had him anyway.
+
+   That is the "he'll come back to me" call, and it runs off SLEEPER's stock
+   ranking, because that is the board your league is drafting from. The pool
+   is kept per-position: measured across all positions, a likely-surviving
+   star at another position swamps the comparison and washes the signal out. */
 function scoreBoard(){
-  const nxt = pickAfterNext();      // when I'd next be able to take him
+  const nxt = pickAfterNext();
   const avail = available();
   const byPos = {};
   avail.forEach(p=>{ (byPos[p.pos] = byPos[p.pos]||[]).push(p); });
   for(const k in byPos) byPos[k].sort((a,b)=>b.proj-a.proj);
 
-  return avail.map(p=>{
-    const need = needMult(p.pos);
-    if(need <= 0) return null;                     // roster-illegal or capped out
+  const cand = avail.map(p=>({p, need: needMult(p.pos)})).filter(c=>c.need > 0);
+  const val = c => c.p.vorp >= 0 ? c.p.vorp*c.need : c.p.vorp*(2-Math.min(c.need,1));
+
+  const pools = {}, full = {};
+  if(nxt){
+    cand.forEach(c=>{
+      (pools[c.p.pos] = pools[c.p.pos]||[]).push({key:c.p.key, v:val(c), s:survival(c.p,nxt)});
+    });
+    for(const k in pools){
+      pools[k].sort((a,b)=>b.v-a.v);
+      pools[k] = pools[k].slice(0,40);
+      full[k] = expectedNext(pools[k], null);
+    }
+  }
+
+  return cand.map(c=>{
+    const p = c.p, need = c.need;
     const surv = survival(p, nxt);
+    const own  = val(c);
+    // what he is still worth to you next turn — the cost of taking him now
+    const held = nxt && pools[p.pos] ? Math.max(0, full[p.pos] - expectedNext(pools[p.pos], p.key)) : 0;
+    let sc = own - held;
     const cohort = byPos[p.pos].filter(x=>x.tier===p.tier);
-    const cliff  = cohort.length<=2 && need>=0.9 && p.pos!=='K' && p.pos!=='DEF';
-    // a negative-VORP player must get WORSE as need drops, not better —
-    // so divide instead of multiply once value goes below replacement
-    const base = p.vorp >= 0 ? p.vorp*need : p.vorp/Math.max(need,0.2);
-    // weight imminent loss harder: the market drafts WRs faster than pure
-    // value-over-replacement implies, and waiting loses the tier outright
-    let sc = base * (1 + 0.55*(1-surv));
-    if(cliff) sc += 14*need;
-    return {p, sc, surv, need, cliff, tierLeft:cohort.length};
-  }).filter(Boolean).sort((a,b)=>b.sc-a.sc);
+    const cliff = cohort.length<=2 && need>=0.9 && p.pos!=='K' && p.pos!=='DEF';
+    if(cliff) sc += 10*need;
+    return {p, sc, surv, need, cliff, tierLeft:cohort.length, own, held};
+  }).sort((a,b)=>b.sc-a.sc);
 }
 
 function reasonFor(e){
@@ -973,12 +1043,21 @@ function reasonFor(e){
     const have=c[p.pos], want=STARTERS[p.pos];
     bits.push(have<want ? `you still need <b>${want-have} starting ${p.pos}</b>` : `fills a <b>starting ${p.pos}</b> spot`);
   } else if(e.need>=0.9){ bits.push('fills a <b>FLEX</b> spot'); }
-  else if(e.need>=0.5){ bits.push('solid depth'); }
+  else if(e.need>=0.5){ bits.push('useful depth'); }
   if(e.cliff) bits.push(`<b>tier cliff</b> — only ${e.tierLeft} left in ${p.pos} Tier ${p.tier}`);
-  if(nxt && e.surv < 0.35) bits.push(`<b>${Math.round(e.surv*100)}% chance</b> he lasts to ${fmtPick(nxt)}`);
-  else if(nxt && e.surv > 0.75 && e.need>0.5) bits.push(`likely still there at ${fmtPick(nxt)} (${Math.round(e.surv*100)}%) — you could wait`);
-  const val = p.adp - pickNo();
-  if(val >= 8) bits.push(`going <b>${val} picks later</b> than market on average`);
+  if(nxt && e.surv < 0.35) bits.push(`<b>won't last</b> — ${Math.round(e.surv*100)}% he's there at ${fmtPick(nxt)}`);
+  // the gap between your board and the room's board is the whole edge
+  if(p.sleeperRank && p.adp){
+    const g = p.sleeperRank - p.adp;
+    // only call it a slide if he actually survives — otherwise the note
+    // contradicts the survival line directly above it
+    if(g >= 12 && e.surv >= 0.5)
+      bits.push(`Sleeper has him <b>${g} spots lower</b> than consensus — he may slide back to you`);
+    else if(g >= 12)
+      bits.push(`Sleeper has him at #${p.sleeperRank}, below his consensus rank`);
+    else if(g <= -12)
+      bits.push(`Sleeper has him <b>${-g} spots higher</b> than consensus — he goes early in this room`);
+  }
   if(S.mode==='bestball' && p.boomBlend!=null && p.boomBlend>=45)
     bits.push(`booms <b>${Math.round(p.boomBlend)}%</b> of weeks (${p.ceil} pt ceiling)`);
   if(p.inj) bits.push(`<b style="color:var(--bad)">${esc(p.inj)}</b> — will miss time`);
@@ -1128,7 +1207,7 @@ function playerRow(p, extra){
     <span class="pos ${p.pos}">${p.pos}</span>
     <span class="pmid">
       <span class="pn">${esc(p.name)}${(p.injury||p.inj)?` <span class="inj">${esc(p.injury||p.inj)}</span>`:''}</span>
-      <span class="pm">${p.team} · ${p.pos}${p.posRank} · Tier ${p.tier} · ADP ${p.adp}${p.bye?' · B'+p.bye:''}${p.posDelta>=8?` · <b style="color:var(--go)">▲${p.posDelta}</b>`:p.posDelta<=-8?` · <b style="color:var(--bad)">▼${-p.posDelta}</b>`:''}${st?` · ${st==='me'?'YOURS':'taken'}`:''}</span>
+      <span class="pm">${p.team} · ${p.pos}${p.posRank} · Tier ${p.tier} · ADP ${p.adp}${p.sleeperRank&&Math.abs(p.sleeperRank-p.adp)>=10?' \u00b7 SL '+p.sleeperRank:''}${p.bye?' · B'+p.bye:''}${p.posDelta>=8?` · <b style="color:var(--go)">▲${p.posDelta}</b>`:p.posDelta<=-8?` · <b style="color:var(--bad)">▼${-p.posDelta}</b>`:''}${st?` · ${st==='me'?'YOURS':'taken'}`:''}</span>
     </span>
     <span class="pr">
       <span class="pv ${p.vorp<0?'neg':''}">${v}</span>
@@ -1170,6 +1249,19 @@ function renderPick(){
   $('#recMeta').innerHTML = `<span class="pos ${top.p.pos}" style="display:inline-block;vertical-align:1px">${top.p.pos}</span>
      &nbsp;${top.p.team} · ${top.p.pos} Tier ${top.p.tier} · ADP ${top.p.adp} · ${top.p.proj} proj pts`;
   $('#recWhy').innerHTML = reasonFor(top);
+  // name the best player the arithmetic expects to still be there next turn
+  const wait = ranked.slice(1,16).filter(e=>e.surv>=0.62 && e.need>=0.5 && e.p.vorp>top.p.vorp-30)
+                     .sort((a,b)=>b.p.vorp-a.p.vorp)[0];
+  const lastName = top.p.name.split(' ').filter(w=>!/^(Jr\.?|Sr\.?|I{2,3}|IV)$/.test(w)).pop();
+  $('#waitNote').innerHTML = (wait && nx)
+    ? `<div class="card" style="border-color:#2a4a5e;background:#141d26">
+        <div class="lbl" style="color:#7fb5d8">You can wait on</div>
+        <div style="font-size:16px;font-weight:700">${esc(wait.p.name)}
+          <span style="color:var(--dim);font-weight:400;font-size:13px">${wait.p.pos} · ${wait.p.vorp>0?'+':''}${wait.p.vorp}</span></div>
+        <div style="font-size:12.5px;color:var(--dim);margin-top:4px;line-height:1.5">
+          <b style="color:#9fd0ec">${Math.round(wait.surv*100)}%</b> he's still there at ${fmtPick(nx)}${wait.p.sleeperRank?` — Sleeper ranks him #${wait.p.sleeperRank}`:''}.
+          Take ${esc(lastName)} now.</div>
+      </div>` : '';
   $('#recAlts').innerHTML = ranked.slice(1,4).map(e=>
     `<div class="alt" data-k="${e.p.key}"><div class="altn">${esc(e.p.name)}</div>
      <div class="altm">${e.p.pos} · ${e.p.vorp>0?'+':''}${e.p.vorp}${nx?` · ${Math.round(e.surv*100)}%`:''}</div></div>`).join('');

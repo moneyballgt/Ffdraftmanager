@@ -66,35 +66,62 @@ Not a static cheat sheet — it reacts to what has already happened.
   players at a spot you still need are nearly gone it stops saying wait. K and DEF are
   suppressed until the last two rounds, then forced.
 
+### Will he come back to you?
+
+The most valuable question in a snake draft is not who is best, it is who will still be
+there next time. So a pick is scored as **value now minus what he was still worth to you
+later**.
+
+Taking a player also removes him from the pool you draw on at your next turn. His marginal
+contribution to that pool is exactly what you forfeit by spending this pick on him. Someone
+the room takes before you pick again contributes almost nothing to that pool, so he costs
+nothing to take — you get his full value. Someone who would have slid back to you is largely
+a wasted pick, because you could have had him anyway.
+
+That means a player one spot lower on your board can and should outrank one above him, if
+the room is going to take him first. The **You can wait on** panel names the best player the
+maths expects to survive, with the odds and the pick number.
+
+**It runs off Sleeper's stock ranking, not expert consensus**, because that is the board
+your league is actually drafting from. Where the two disagree the row shows both — `ADP 8 ·
+SL 21` — and that gap is where the value is. Sleeper's rankings arrive with the live player
+sync; without it, survival falls back to consensus and gets coarser.
+
 ### The best-ball layer, and where to distrust it
 
-Boom rates come from nflverse weekly stats for 2024-25, blended 70/30 toward 2025.
+Boom rates come from nflverse weekly stats for 2024-25, blended 70/30 toward 2025, and
+weighted with ceiling and PPG at 45/25/30.
 
-The adjustment moves a player in **rank space** — it reorders him within his position and
-then hands out that position's existing points curve in the new order. Scaling his points
-directly would be worth ±35% of 300 for an elite back but only ±35% of 100 for a bench one,
-which inflates the top of every position and destroys the cross-position comparability that
-value over replacement depends on.
+**The experts already price most of this in.** Measured on this board, consensus rank
+explains 48% of the boom composite at QB, 57% at TE, 66% at WR and 71% at RB. Adding the raw
+score on top of consensus would count most of it twice and systematically overrate the
+players the rankers had already promoted for exactly that reason. So the composite is
+regressed on consensus rank within each position and **only the residual is used** — what
+the spike-week record knows that the rankers did not.
 
-Three honest limits, two of them raised by whoever built the spreadsheet:
+The adjustment then moves a player in **rank space**, reordering him within his position and
+reassigning that position's points curve. Scaling his projection instead would be worth ±35%
+of 300 to an elite back and ±35% of 100 to a bench one, which inflates the top of every
+position and destroys the cross-position comparability that value over replacement needs.
 
-- **Boom rate is backward-looking.** It says nothing about a player whose situation changed
-  — new team, new offense, a target share that just moved. Treat a big riser skeptically.
-- **2026 rookies have no history at all.** 22 of the top 250 have blank boom columns. They
-  are scored **neutral, never penalized**, so consensus rank alone carries them.
-- **Never normalize boom across positions.** A weekly top-12 finish is a far easier bar at
-  QB (32 starters) than at WR. Normalizing across positions ranks backup quarterbacks above
-  real players; everything here is computed within position.
-- Short 2025 samples are regressed toward neutral rather than trusted (min 8 games).
-- **No boom data for K or DEF** — nflverse weekly stats carry neither, so those are drafted
-  off consensus alone.
+Limits worth keeping in mind:
 
-**Boom influence** is a slider in Setup, defaulting to 35%. Set it to 0 for pure expert
-consensus. Raising it lets the spike-week data move players further within their position.
+- **Boom rate is backward-looking.** It says nothing about a player whose situation changed.
+  Treat a big riser skeptically.
+- **2026 rookies have no history.** 22 of the top 250 have blank boom columns. They score
+  **neutral, never penalized**, and ride on consensus alone.
+- **Never normalize boom across positions.** A weekly top-12 finish is a far easier bar at QB
+  (32 starters) than at WR; a cross-position score ranks backup quarterbacks above real
+  players. Everything here is computed within position.
+- Short 2025 samples are regressed toward neutral (min 8 games).
+- **No boom data for K or DEF** — nflverse weekly stats carry neither.
 
-Injuries: 47 players expected to miss 1+ week are flagged, and drop 7 spots within their
-position. Only 3 land inside the top 250 — serious injuries are already priced into
-consensus, so this matters more as a waiver filter than a draft filter.
+**Boom influence** is a slider in Setup, default 35%, applied to the residual. Set it to 0
+for pure consensus.
+
+Injuries: 47 players expected to miss 1+ week are flagged and drop 7 spots within position.
+Only 3 are inside the top 250 — serious injuries are already priced into consensus, so this
+matters more as a waiver filter than a draft filter.
 
 Simulated across all 12 draft slots in both formats against roster-aware opponents: every
 slot finishes with a legal, complete 16-man roster and no empty starting spots. Best ball
