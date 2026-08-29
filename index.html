@@ -12,7 +12,7 @@
 <style>
 :root{
   --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3140;
-  --tx:#e8edf5; --dim:#8b97a8; --faint:#5d6779;
+  --tx:#e8edf5; --dim:#97a3b4; --faint:#7b8699;
   --qb:#f2596f; --rb:#3ddc97; --wr:#4aa8ff; --te:#ffb454; --k:#b98cff; --def:#7f8fa6;
   --go:#3ddc97; --warn:#ffb454; --bad:#f2596f;
   --r:12px;
@@ -33,6 +33,7 @@ header{position:sticky;top:0;z-index:40;background:rgba(13,17,23,.94);
 .hsub{font-size:11.5px;color:var(--dim);line-height:1.25}
 .spacer{flex:1}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.dot.bad{background:var(--bad)}
 .dot.live{background:var(--go);box-shadow:0 0 0 0 rgba(61,220,151,.6);animation:pl 1.8s infinite}
 @keyframes pl{70%{box-shadow:0 0 0 7px rgba(61,220,151,0)}100%{box-shadow:0 0 0 0 rgba(61,220,151,0)}}
 .clock{padding:7px 12px;text-align:center;font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
@@ -65,12 +66,12 @@ main{padding:12px;max-width:760px;margin:0 auto}
 .pos.QB{background:var(--qb)}.pos.RB{background:var(--rb)}.pos.WR{background:var(--wr)}
 .pos.TE{background:var(--te)}.pos.K{background:var(--k)}.pos.DEF{background:var(--def)}
 .pmid{flex:1;min-width:0}
-.pn{font-weight:620;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pm{font-size:11px;color:var(--dim);margin-top:1px;font-variant-numeric:tabular-nums}
+.pn{display:block;font-weight:620;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pm{display:block;font-size:11.5px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .pr{text-align:right;flex:none}
-.pv{font-size:14px;font-weight:750;color:var(--go);font-variant-numeric:tabular-nums}
+.pv{display:block;font-size:14px;font-weight:750;color:var(--go);font-variant-numeric:tabular-nums}
 .pv.neg{color:var(--faint)}
-.ps{font-size:10.5px;color:var(--faint);margin-top:1px;font-variant-numeric:tabular-nums}
+.ps{display:block;font-size:11px;color:var(--dim);margin-top:2px;font-variant-numeric:tabular-nums}
 .inj{color:var(--bad);font-weight:700}
 .tierbar{display:flex;align-items:center;gap:8px;margin:13px 0 3px;font-size:10.5px;
   font-weight:750;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
@@ -80,7 +81,7 @@ main{padding:12px;max-width:760px;margin:0 auto}
 /* ---- controls ---- */
 .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:10px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
-.chip{padding:7px 13px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);
+.chip{padding:12px 15px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);
   font-size:12.5px;font-weight:650;white-space:nowrap;flex:none;color:var(--dim)}
 .chip.on{background:var(--tx);color:var(--bg);border-color:var(--tx)}
 input,select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;
@@ -128,14 +129,16 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
 /* ---- misc ---- */
 .warnbox{background:#2b2113;border:1px solid #5a4520;color:#ffd9a3;border-radius:9px;padding:10px;font-size:12.5px;line-height:1.5;margin-bottom:10px}
 .runbox{background:#2a1a1e;border:1px solid #4a2730;color:#ffc0c8;border-radius:9px;padding:10px;font-size:12.5px;font-weight:600;margin-bottom:10px}
-.gone{opacity:.34}
+.gone .pn,.gone .pm{color:var(--faint);text-decoration:line-through}
+.gone .pv,.gone .ps{opacity:.45}
+.gone .pos{opacity:.5}
 .mine{background:#13251c}
 .empty{text-align:center;color:var(--faint);padding:34px 12px;font-size:13.5px;line-height:1.6}
 .feed{font-size:12px;color:var(--dim);display:flex;flex-direction:column;gap:5px;max-height:210px;overflow-y:auto}
 .feed div{display:flex;gap:7px}
 .feed .fp{color:var(--faint);width:38px;flex:none}
 .feed .fm{color:var(--go);font-weight:650}
-.syncline{padding:3px 12px 5px;font-size:11px;color:var(--faint);letter-spacing:.02em}
+.syncline{padding:4px 12px 6px;font-size:12.5px;color:var(--dim);letter-spacing:.02em;font-weight:600}
 .syncline.ok{color:var(--go)}
 .syncline.stale{color:var(--warn)}
 .syncline.bad{color:var(--bad);font-weight:650}
@@ -164,15 +167,17 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
 <main>
   <!-- ============ PICK ============ -->
   <section id="vPick">
-    <div id="alerts"></div>
-    <div id="waitNote"></div>
     <div class="card rec" id="recCard">
       <div class="lbl">Take him</div>
       <div class="recname" id="recName">—</div>
       <div class="recmeta" id="recMeta"></div>
       <div class="recwhy" id="recWhy"></div>
+      <div id="recClose" style="font-size:12.5px;color:var(--te);margin-top:8px"></div>
+      <button class="btn pri" id="recDraft" style="width:100%;margin-top:12px;padding:17px;font-size:16px">Draft him</button>
       <div class="alts" id="recAlts"></div>
     </div>
+    <div id="waitNote"></div>
+    <div id="alerts"></div>
     <div class="card">
       <div class="lbl">Gone before your next pick <span id="gonePick"></span></div>
       <div class="plist" id="lastChance"></div>
@@ -187,6 +192,10 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
   <section id="vBoard" hidden>
     <input id="search" placeholder="Search player…" autocomplete="off" autocorrect="off" spellcheck="false" style="margin-bottom:10px">
     <div class="chips" id="posChips"></div>
+    <button class="btn" id="boardPill" hidden
+      style="position:fixed;left:50%;transform:translateX(-50%);bottom:86px;z-index:60;width:auto;
+             padding:11px 20px;background:var(--tx);color:var(--bg);border-color:var(--tx);
+             font-weight:750;box-shadow:0 6px 20px rgba(0,0,0,.5)">New picks — refresh list</button>
     <div class="plist" id="board"></div>
   </section>
 
@@ -231,7 +240,7 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
       </div>
       <div class="row2" style="margin-top:8px">
         <div><div class="hint" style="margin:0 0 5px">Rounds</div><input id="cfgRounds" type="number" inputmode="numeric" value="16"></div>
-        <div><div class="hint" style="margin:0 0 5px">Scoring</div><select id="cfgScoring"><option value="1">Full PPR</option><option value="0.5">Half PPR</option><option value="0">Standard</option></select></div>
+        <div><div class="hint" style="margin:0 0 5px">Scoring</div><select id="cfgScoring" disabled style="opacity:.55"><option>Full PPR (from the ranking source)</option></select></div>
       </div>
       <div class="hint" style="margin-top:10px">Format</div>
       <select id="cfgMode" style="margin-top:5px">
@@ -292,6 +301,7 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
   <div class="sbtns">
     <button class="btn pri" id="shMine">✓ I drafted him</button>
     <button class="btn" id="shGone">✕ Someone else took him</button>
+    <div class="btn" id="shTaken" hidden style="background:#2a1a1e;color:var(--bad);border-color:#4a2730;cursor:default"></div>
     <button class="btn" id="shBack">Cancel</button>
   </div>
 </div>
@@ -448,7 +458,7 @@ C.J. Stroud|HOU|QB|290|139|8|14|14.9|28.6|7.1|28.8|6.5|17|13.0|11.8|23.5||
 Daniel Jones|IND|QB|285|140|13|13|17.4|53.8|23.1|29.5|7.1|10|13.5|40|24.4||
 Deebo Samuel Sr.|SF|WR|145|141|8|16|11.8|25|6.2|23.6|6.9|15|10.4|20|25.1||
 Dylan Sampson|CLE|RB|115|142|11|15|5.8|13.3|0|17.3|5.6||||||
-Rashid Shaheed|SEA|WR|145|143|11|18|8.7|5.6|0|21.4|5.8|6|13.6|0|20.9||
+Rashid Shaheed|SEA|WR|145|143|11|17|8.7|5.9|0.0|21.4|5.8|6|13.6|0|20.9||
 Keaton Mitchell|LAC|RB|115|144|7|13|4.3|0|0|11.1|3.3|4|1.7|0|5.8||
 Denzel Boston|CLE|WR|140|145|11||||||||||||
 Cam Ward|TEN|QB|285|146|9|17|11.0|11.8|5.9|23.9|5.4||||||
@@ -565,16 +575,18 @@ const SLOTORDER = ['QB','RB','RB','WR','WR','TE','FLEX','FLEX','K','DEF'];
 /* replacement ranks for 12-team, 2WR + 2FLEX, full PPR */
 /* Replacement level differs by format. Best ball rosters ~2 QB and ~2-3 TE per
    team, so the last startable player at those spots sits far deeper. */
-const REPL_REDRAFT  = {QB:13, RB:31, WR:42, TE:13, K:13, DEF:13};
+const REPL_REDRAFT  = {QB:13, RB:31, WR:38, TE:13, K:13, DEF:13};
 /* Only one QB and one TE start each week even in best ball, so their
    replacement level barely moves; what changes is that more roster spots go
    to RB/WR. Pushing the QB baseline deep inflates every quarterback's value
    over replacement and buries the rest of the roster. */
-const REPL_BESTBALL = {QB:14, RB:30, WR:48, TE:15, K:13, DEF:13};
+const REPL_BESTBALL = {QB:14, RB:33, WR:42, TE:15, K:13, DEF:13};
 /* Boom-score weights, from the Inputs tab of the draft board workbook. */
-const W = {boom:0.45, ceil:0.25, ppg:0.30};
-const MIN_GM = 8;        // below this, spike-week rate is low-sample and gets regressed
+const W = {boom:0.45, ceil:0.25, ppg:0.30, cv:0.22};   // cv = best ball only
+const MIN_GM = 8;
+const BB_UNIT = 0.58;   // pooled residual SD, so all positions share one scale        // below this, spike-week rate is low-sample and gets regressed
 const BB_SWING_DEFAULT = 0.35;  // how far a boom profile may move a player's value
+const VAL_FLOOR = 90;    // points below replacement still worth something
 const INJ_SPOTS = 7;     // positional spots to dock a player expected to miss time
 const SIGMA = 8;              // ADP noise, in picks
 const LS = 'draftroom.v2';
@@ -583,6 +595,7 @@ const LS = 'draftroom.v2';
 let S = {
   teams:12, rounds:16, slot:null, scoring:1, mode:'bestball', bbSwing:0.35,
   taken:{},          // key -> 'me' | 'them'
+  manual:[],         // hand-entered picks, preserved across sync rebuilds
   order:[],          // [{key,by,pick}] chronological
   draftId:null, userId:null, sleeperSlot:null,
   synced:0
@@ -594,6 +607,8 @@ let pollTimer = null;
 let view = 'Pick';
 let posFilter = 'ALL';
 let sheetKey = null;
+let recKey = null;   // who the big card is currently recommending
+let boardDirty = false;   // new picks arrived while he was scrolled into the list
 
 const $ = s => document.querySelector(s);
 /* JoinKey spec: lowercased, ASCII-folded, punctuation-stripped, suffix-stripped.
@@ -632,6 +647,8 @@ function buildPlayers(){
     p.ppg  = p.ppg25!=null ? p.ppg25 : p.ppg24;
     p.ceil = p.ceil25!=null ? p.ceil25 : p.ceil24;
     p.gm   = p.gm25 || 0;
+    p.sd = p.sd25!=null ? p.sd25 : null;
+    p.cv = (p.sd!=null && p.ppg) ? p.sd/Math.max(1,p.ppg) : 0;
     p.hasHistory = p.boomBlend!=null && p.ppg!=null;
   });
   ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
@@ -639,9 +656,10 @@ function buildPlayers(){
      .forEach((p,i)=> p.ecrPosRank = i+1);
   });
   computeBoom();
-  // scoring adjustment away from full PPR
-  const recRate = {WR:0.28, TE:0.30, RB:0.15, QB:0, K:0, DEF:0};
-  P.forEach(p=>{ p.proj = Math.round(p.base - (p.base*recRate[p.pos]||0)*(1-S.scoring)); });
+  // NOTE: projections come from consensus RANK, not a points model, so there
+  // is nothing here for a scoring multiplier to act on. The board is full-PPR
+  // because its ranking source is; another format needs different rankings
+  // pasted in, not a slider.
 
   // merge live Sleeper info
   if(sleeperMeta){
@@ -689,9 +707,13 @@ function computeBoom(){
       const sd = Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/v.length) || 1;
       return x => (x-m)/sd;
     };
-    const zb=z(p=>p.boomBlend), zc=z(p=>p.ceil), zg=z(p=>p.ppg);
+    const zb=z(p=>p.boomBlend), zc=z(p=>p.ceil), zg=z(p=>p.ppg), zv=z(p=>p.cv);
     list.forEach(p=>{
-      p._raw = W.boom*zb(p.boomBlend) + W.ceil*zc(p.ceil) + W.ppg*zg(p.ppg);
+      p._raw = W.boom*zb(p.boomBlend) + W.ceil*zc(p.ceil) + W.ppg*zg(p.ppg)
+             // Week-to-week spread is an ASSET when the lineup auto-selects
+             // your best scorers — simulation puts it near 250 pts a season,
+             // and it was the one direct variance measure in the data, unused.
+             + (S.mode==='bestball' ? W.cv*zv(p.cv) : 0);
     });
 
     /* The experts already watch these players. Measured against this board,
@@ -709,9 +731,17 @@ function computeBoom(){
     const res = list.map(p=> p._raw - (intercept + slope*p.ecrPosRank));
     const rm = res.reduce((a,b)=>a+b,0)/n;
     const rsd = Math.sqrt(res.reduce((a,b)=>a+(b-rm)*(b-rm),0)/n) || 1;
+    /* Do NOT rescale each position to unit variance. Dividing by the residual
+       SD amplifies most exactly where consensus explained most (RB, R^2=.69)
+       and least where it explained least (QB, R^2=.48) — precisely backwards.
+       Leaving residuals in raw composite units IS the correct shrinkage: a
+       position the rankers cover well simply has less left to say. */
     list.forEach((p,i)=>{
-      // rescale to unit variance so the slider means the same thing everywhere
-      p.bb = ((res[i]-rm)/rsd) * Math.min(1, (p.gm||0)/MIN_GM);
+      const gm = p.gm || 0;
+      // a 4-game sample should barely move anyone; min(1,gm/8) let 7-game
+      // samples swing a player 40 points
+      const reliability = Math.max(0, Math.min(1, (gm - 3) / 11));
+      p.bb = ((res[i]-rm) / BB_UNIT) * reliability;
     });
   });
   P.filter(p=>p.bb==null).forEach(p=> p.bb = 0);
@@ -723,6 +753,14 @@ function computeBoom(){
    directly instead would be worth +/-35% of 300 for an elite back and only
    +/-35% of 100 for a bench one, which inflates the top of every position
    and destroys the cross-position comparability that VORP depends on. */
+/* Sleeper designations, worst first. */
+function injFactor(d){
+  const t = String(d).toUpperCase();
+  if(/IR|PUP|NFI|DNR|SUS/.test(t)) return 0.45;   // out for weeks or the season
+  if(/OUT|NA/.test(t))             return 0.72;
+  if(/DOUBT/.test(t))              return 0.88;
+  return 0.94;
+}
 function applyFormat(){
   const bb = S.mode==='bestball';
   const sw = S.bbSwing==null ? BB_SWING_DEFAULT : S.bbSwing;
@@ -735,11 +773,16 @@ function applyFormat(){
       let shift = 0;
       // room to move grows with rank: WR1 has nowhere to climb, WR50 does
       if(bb && p.bb) shift = -sw * (6 + 0.30*r) * Math.max(-2, Math.min(2, p.bb));
-      if(p.inj) shift += INJ_SPOTS;
+
       p._k = r + shift;
     });
     list.sort((a,b)=> a._k - b._k || (a.ecrPosRank||999) - (b.ecrPosRank||999));
-    list.forEach((p,i)=>{ p.proj = curve[i]; p.posDelta = (p.ecrPosRank||i+1) - (i+1); });
+    list.forEach((p,i)=>{ p.proj = curve[i]; });
+    // Applied to points AFTER the curve so the boom shift cannot cancel it,
+    // and scaled by severity — a reconstructed ACL is not a one-week hamstring.
+    list.forEach(p=>{ if(p.inj) p.proj = Math.round(p.proj * injFactor(p.inj)); });
+    list.slice().sort((a,b)=>b.proj-a.proj)
+        .forEach((p,i)=>{ p.posDelta = (p.ecrPosRank||i+1) - (i+1); });
   });
 }
 
@@ -788,35 +831,50 @@ const NICK = {cardinals:'ARI',falcons:'ATL',ravens:'BAL',bills:'BUF',panthers:'C
   giants:'NYG',jets:'NYJ',eagles:'PHI',steelers:'PIT',seahawks:'SEA',fortyniners:'SF',niners:'SF',
   buccaneers:'TB',bucs:'TB',titans:'TEN',commanders:'WAS'};
 
+/* Tokenise first, then classify. Matching position and team codes against the
+   raw string is what broke this: /\bK\b/ fires inside "J.K. Dobbins" (periods
+   are word boundaries) and made him a kicker, and a backwards scan for a team
+   code ate the "KC" out of "KC Concepcion". */
 function parseRankings(text){
+  const POS = {QB:'QB',RB:'RB',WR:'WR',TE:'TE',K:'K',PK:'K',DST:'DEF',DEF:'DEF','D/ST':'DEF'};
   const out = [];
   text.split(/\r?\n/).forEach(raw=>{
     let l = raw.trim();
     if(!l) return;
-    if(/^(rank|player|pos|team|tier|bye|notes|ecr|adp)\b/i.test(l) && l.length < 60) return;  // header row
-    l = l.replace(/^[#\s]*\d{1,3}(?:\s*[.):,|\t-]\s*|\s+)/, '');   // leading rank, any separator
-    l = l.replace(/\((\d{1,3})\)/g, ' ');                     // trailing "(12)"
+    if(/^(rank|player|pos|team|tier|bye|notes|ecr|adp)\b/i.test(l) && l.length < 60) return;
+    l = l.replace(/^[#\s]*\d{1,3}(?:\s*[.):,|\t-]\s*|\s+)/, '');   // leading rank
+    const isDST = /\bd\/?st\b|\bdefense\b/i.test(l);
+
+    const toks = l.split(/[\s,()\[\]|\t]+/).filter(Boolean);
     let pos = null, team = null;
-    const pm = l.match(/\b(QB|RB|WR|TE|K|PK|DST|D\/ST|DEF)\s*\d{0,3}\b/i);
-    if(pm){ pos = pm[1].toUpperCase().replace('PK','K').replace('D/ST','DEF').replace('DST','DEF');
-            l = l.replace(pm[0], ' '); }
-    // a standalone number is a bye week, tier or leftover rank — never part of a name
-    const parts = l.split(/[\s,()\[\]|\t]+/).filter(x=>x && !/^\d{1,3}$/.test(x));
-    for(let i=parts.length-1; i>=0; i--){
-      const u = parts[i].toUpperCase().replace(/[^A-Z]/g,'');
-      const t = TEAMALIAS[u] || u;
-      if(TEAMS.includes(t)){ team = t; parts.splice(i,1); break; }
-    }
-    let name = parts.join(' ').replace(/[-–—•*]+/g,' ').replace(/\s+/g,' ').trim();
-    if(!name) return;
-    if(pos==='DEF' || /\bd\/?st\b|\bdefense\b/i.test(raw)){
+    const name = [];
+    toks.forEach((tok, i)=>{
+      const bare = tok.replace(/[^A-Za-z/]/g,'');
+      const up = bare.toUpperCase();
+      // "Bye", and any standalone number (bye week, tier, leftover rank)
+      if(/^bye$/i.test(bare) || /^\d{1,3}$/.test(tok.replace(/\D/g,'')) && !/[A-Za-z]/.test(tok)) return;
+      // a position token, optionally carrying its positional rank: WR1, RB35
+      const pm = up.match(/^(QB|RB|WR|TE|PK|DST|DEF|D\/ST|K)(\d{0,3})$/);
+      // never treat a lone initial ("J.K.", "K.J.") as the kicker position
+      const initial = /\.$/.test(tok) || /^[A-Za-z]\.[A-Za-z]\.?$/.test(tok);
+      if(pm && !pos && !initial){ pos = POS[pm[1]]; return; }
+      // a team code, but never the first token — that is "KC Concepcion"
+      if(i > 0 && !team){
+        const t = TEAMALIAS[up] || up;
+        if(TEAMS.includes(t) && up.length >= 2 && up === bare.toUpperCase()){ team = t; return; }
+      }
+      name.push(tok);
+    });
+
+    let nm = name.join(' ').replace(/[-–—•*]+/g,' ').replace(/\s+/g,' ').trim().replace(/[,;:]+$/,'');
+    if(isDST || pos === 'DEF'){
       pos = 'DEF';
-      const nk = name.toLowerCase().replace(/[^a-z]/g,'');
+      const nk = nm.toLowerCase().replace(/[^a-z]/g,'');
       for(const k in NICK) if(nk.includes(k)){ team = NICK[k]; break; }
-      if(team) name = DEFNAME[team] || name;
+      if(team) nm = DEFNAME[team] || nm;
     }
-    if(name.length < 2 || name.length > 40) return;
-    out.push({name, team, pos, rank: out.length+1});
+    if(!nm || nm.length < 2 || nm.length > 40) return;
+    out.push({name:nm, team, pos, rank: out.length+1});
   });
   return out;
 }
@@ -892,8 +950,17 @@ const onClock = () => S.slot && slotOnClock(pickNo()) === S.slot;
 /* survival probability at a future pick number */
 function survival(p, atPick){
   if(!atPick) return 1;
-  const gap = atPick - (p.mktRank || p.adp);
-  return 1 - 1/(1+Math.exp(-gap/SIGMA));
+  const r = p.mktRank || p.adp;
+  // Dispersion grows with rank: round-one picks are near-deterministic, late
+  // ones scatter. One fixed sigma was overconfident early, underconfident late.
+  const sig = 3 + 0.18*r;
+  const raw = t => 1 - 1/(1+Math.exp(-(t-r)/sig));
+  // Condition on him being available NOW. Unconditionally, a player who has
+  // already slid past his rank reads as almost certainly gone while he is
+  // sitting right there — understated by up to 40x, and that is exactly the
+  // population the "he'll come back to me" call is about.
+  const now = Math.max(1e-6, raw(pickNo()));
+  return Math.max(0, Math.min(1, raw(atPick)/now));
 }
 
 /* ============================ ROSTER ============================ */
@@ -949,7 +1016,10 @@ function needMult(pos){
   const bb = S.mode==='bestball';
   const CAP = bb ? CAP_BESTBALL : CAP_REDRAFT;
   if(c[pos] >= CAP[pos]) return 0;
-  const picksLeft = S.slot ? myPickNumbers().filter(x=>x>=pickNo()).length : 99;
+  // 99 here meant the K/DEF branch (picksLeft<=2) could never fire, so with no
+  // draft slot set the tool finished every draft with both slots empty.
+  const picksLeft = S.slot ? myPickNumbers().filter(x=>x>=pickNo()).length
+                           : Math.max(0, S.rounds - myPlayers().length);
   const slack = picksLeft - unfilledRequired();   // spare picks beyond bare necessity
 
   if(pos==='K' || pos==='DEF'){
@@ -1023,7 +1093,12 @@ function scoreBoard(){
   for(const k in byPos) byPos[k].sort((a,b)=>b.proj-a.proj);
 
   const cand = avail.map(p=>({p, need: needMult(p.pos)})).filter(c=>c.need > 0);
-  const val = c => c.p.vorp >= 0 ? c.p.vorp*c.need : c.p.vorp*(2-Math.min(c.need,1));
+  /* Score on a floor-shifted scale so multiplying by roster need stays
+     monotone on BOTH sides of replacement. The old two-branch form collapsed
+     to vorp*1 for any need >= 1, silently disabling every urgency multiplier
+     across the second half of the draft, where nearly everyone is below
+     replacement. */
+  const val = c => Math.max(1, c.p.vorp + VAL_FLOOR) * c.need;
 
   const pools = {}, full = {};
   if(nxt){
@@ -1057,6 +1132,8 @@ function reasonFor(e){
   if(e.need>=0.99 && ['RB','WR','QB','TE'].includes(p.pos)){
     const have=c[p.pos], want=STARTERS[p.pos];
     bits.push(have<want ? `you still need <b>${want-have} starting ${p.pos}</b>` : `fills a <b>starting ${p.pos}</b> spot`);
+  } else if(p.pos==='K' || p.pos==='DEF'){
+    bits.push(`last rounds — you still need a <b>${p.pos==='K'?'kicker':'defense'}</b>`);
   } else if(e.need>=0.9){ bits.push('fills a <b>FLEX</b> spot'); }
   else if(e.need>=0.5){ bits.push('useful depth'); }
   if(e.cliff) bits.push(`<b>tier cliff</b> — only ${e.tierLeft} left in ${p.pos} Tier ${p.tier}`);
@@ -1081,6 +1158,8 @@ function reasonFor(e){
 }
 
 function runAlert(){
+  // a "WR run" in round 15 is noise — everyone is taking whatever is left
+  if(roundOf(pickNo()) > 10) return null;
   const last = S.order.slice(-8);
   if(last.length<5) return null;
   const c={};
@@ -1093,13 +1172,26 @@ function runAlert(){
 /* ============================ ACTIONS ============================ */
 function take(key, by){
   if(S.taken[key]) return;
+  const rec = {key, by, pick: pickNo()};
   S.taken[key] = by;
-  S.order.push({key, by, pick: pickNo()});
+  S.order.push(rec);
+  // Sleeper is rebuilt from scratch every poll, so a hand-entered pick has to
+  // be remembered separately or it silently vanishes within four seconds.
+  if(pollTimer) (S.manual = S.manual||[]).push(rec);
   save(); render();
 }
 function undo(){
-  const last = S.order.pop();
-  if(last) delete S.taken[last.key];
+  if(pollTimer){
+    // synced picks come straight back on the next poll; only manual ones
+    // can actually be taken back
+    const m = (S.manual||[]).pop();
+    if(!m){ alert('Picks are coming from Sleeper — undo it there. Only picks you entered by hand can be undone here.'); return; }
+    delete S.taken[m.key];
+    S.order = S.order.filter(o=>o.key!==m.key);
+  } else {
+    const last = S.order.pop();
+    if(last) delete S.taken[last.key];
+  }
   save(); render();
 }
 
@@ -1179,12 +1271,15 @@ async function connectDraft(id){
       try{
         const lg = await j('league/'+d.league_id);
         const rec = lg.scoring_settings && lg.scoring_settings.rec;
-        if(rec!=null) S.scoring = rec;
+        if(rec!=null){
+          S.scoring = rec;
+          S.scoringWarn = Math.abs(rec-1) > 0.01
+            ? `This league scores ${rec} per reception, but the board is built on full-PPR consensus. Paste rankings for your scoring to correct it.` : '';
+        }
       }catch(e){}
     }
     $('#cfgTeams').value=S.teams; $('#cfgRounds').value=S.rounds;
     if(S.slot) $('#cfgSlot').value=S.slot;
-    $('#cfgScoring').value = String(S.scoring);
     save(); buildPlayers();
     $('#syncMsg').textContent = `Connected · ${S.teams} teams · ${S.rounds} rounds${S.slot?` · you are slot ${S.slot}`:''} · picks will load automatically.`;
     startPoll();
@@ -1205,6 +1300,12 @@ async function pullPicks(){
       S.order.push({key, by: mine?'me':'them', pick: pk.pick_no});
       S.taken[key] = mine?'me':'them';
     });
+    // re-apply anything entered by hand that Sleeper does not know about
+    (S.manual||[]).forEach(m=>{
+      if(!S.taken[m.key]){ S.taken[m.key]=m.by; S.order.push(m); }
+    });
+    S.order.sort((a,b)=>a.pick-b.pick);
+    S.unmatched = S.order.filter(o=>!byKey[o.key]).length;
     S.synced = Date.now(); save(); render();
   }catch(e){ /* keep last known state */ }
 }
@@ -1237,8 +1338,8 @@ function renderHeader(){
   $('#hSub').textContent  = `Pick ${Math.min(n,totalPicks())} of ${totalPicks()}`;
   $('#hSlot').textContent = S.slot ? `Slot ${S.slot} of ${S.teams}` : 'Slot not set';
   $('#hNext').textContent = nx ? 'You: '+fmtPick(nx) : '';
-  $('#hDot').className = 'dot' + (pollTimer?' live':'');
   const sy = syncState(), sl = $('#hSync');
+  $('#hDot').className = 'dot' + (sy.cls==='ok' ? ' live' : sy.cls==='bad' ? ' bad' : '');
   if(sl){ sl.textContent = sy.txt; sl.className = 'syncline ' + sy.cls;
           sl.style.display = S.draftId ? 'block' : 'none'; }
 
@@ -1260,9 +1361,14 @@ function renderPick(){
   const c=counts(), rl = S.slot?myPickNumbers().filter(x=>x>=pickNo()).length:99;
   if(rl<=2 && (!c.K||!c.DEF)) A.innerHTML += `<div class="warnbox">Last picks — you still need ${!c.K?'a K':''}${!c.K&&!c.DEF?' and ':''}${!c.DEF?'a DEF':''}.</div>`;
   if(!S.slot) A.innerHTML += `<div class="warnbox">Set your draft slot in <b>Setup</b> so timing advice works.</div>`;
+  if(S.scoringWarn) A.innerHTML += `<div class="warnbox">${esc(S.scoringWarn)}</div>`;
 
   const top = ranked[0];
-  if(!top){ $('#recName').textContent='—'; $('#recWhy').textContent=''; $('#recAlts').innerHTML=''; return; }
+  if(!top){ recKey=null; $('#recName').textContent='—'; $('#recWhy').textContent='';
+            $('#recAlts').innerHTML=''; $('#recDraft').hidden=true; $('#waitNote').innerHTML=''; return; }
+  $('#recDraft').hidden = false;
+  recKey = top.p.key;
+  $('#recDraft').textContent = 'Draft ' + top.p.name;
   $('#recName').textContent = top.p.name;
   $('#recMeta').innerHTML = `<span class="pos ${top.p.pos}" style="display:inline-block;vertical-align:1px">${top.p.pos}</span>
      &nbsp;${top.p.team} · ${top.p.pos} Tier ${top.p.tier} · ADP ${top.p.adp} · ${top.p.proj} proj pts`;
@@ -1280,9 +1386,16 @@ function renderPick(){
           <b style="color:#9fd0ec">${Math.round(wait.surv*100)}%</b> he's still there at ${fmtPick(nx)}${wait.p.sleeperRank?` — Sleeper ranks him #${wait.p.sleeperRank}`:''}.
           Take ${esc(lastName)} now.</div>
       </div>` : '';
+  // Show survival, not value over replacement: the card ranks by pick score,
+  // and printing a different number beside it reads as a bug.
   $('#recAlts').innerHTML = ranked.slice(1,4).map(e=>
     `<div class="alt" data-k="${e.p.key}"><div class="altn">${esc(e.p.name)}</div>
-     <div class="altm">${e.p.pos} · ${e.p.vorp>0?'+':''}${e.p.vorp}${nx?` · ${Math.round(e.surv*100)}%`:''}</div></div>`).join('');
+     <div class="altm">${e.p.pos}${nx?` · ${Math.round(e.surv*100)}% lasts`:''}</div></div>`).join('');
+  // and say so when the top two are inside the noise
+  const gap = ranked[1] ? top.sc - ranked[1].sc : 99;
+  $('#recClose').innerHTML = (ranked[1] && gap < Math.max(4, Math.abs(top.sc)*0.05))
+    ? `Essentially even with <b>${esc(ranked[1].p.name)}</b> — take the position you need.`
+    : '';
 
   $('#gonePick').textContent = nx ? `(${fmtPick(nx)})` : '';
   const lc = ranked.filter(e=>e.surv<0.5 && e.need>0.4 && e.p.vorp>0).slice(0,8);
@@ -1296,12 +1409,23 @@ function renderPick(){
   }).join('') || `<div class="empty">No picks yet.</div>`;
 }
 
-function renderBoard(){
+function renderBoard(force){
+  // Re-sorting the list under a moving thumb makes him tap the wrong player,
+  // and with sync on that pick is hard to take back. Hold the redraw and
+  // offer it instead.
+  if(!force && window.scrollY > 140 && !$('#search').value){
+    boardDirty = true; $('#boardPill').hidden = false; return;
+  }
+  boardDirty = false; $('#boardPill').hidden = true;
   const q = norm($('#search').value);
   const chips = ['ALL','QB','RB','WR','TE','K','DEF'];
   $('#posChips').innerHTML = chips.map(c=>`<button class="chip ${posFilter===c?'on':''}" data-p="${c}">${c}</button>`).join('');
   let list = available();
-  if(posFilter!=='ALL') list = list.filter(p=>p.pos===posFilter);
+  // K and DEF have no meaningful cross-position value: the pool is 14 and 16
+  // deep, so "replacement" is whoever happened to be typed in last and a
+  // kicker floats above 180 real players. They stay on their own filters.
+  if(posFilter==='ALL') list = list.filter(p=>p.pos!=='K' && p.pos!=='DEF');
+  else list = list.filter(p=>p.pos===posFilter);
   if(q) list = P.filter(p=>norm(p.name).includes(q));
   list = list.slice().sort((a,b)=>b.vorp-a.vorp);
   if(q){ $('#board').innerHTML = list.slice(0,40).map(p=>playerRow(p)).join('') || `<div class="empty">No match.</div>`; return; }
@@ -1348,6 +1472,7 @@ function renderRoster(){
 function render(){
   if(!P.length) return;
   renderHeader();
+  if(sheetKey && $('#sheet').classList.contains('on')) fillSheet(sheetKey);
   if(view==='Pick') renderPick();
   if(view==='Board') renderBoard();
   if(view==='Roster') renderRoster();
@@ -1355,8 +1480,13 @@ function render(){
 
 /* ============================ SHEET ============================ */
 function openSheet(key){
-  const p = byKey[key]; if(!p) return;
+  if(!byKey[key]) return;
   sheetKey = key;
+  fillSheet(key);
+  $('#veil').classList.add('on'); $('#sheet').classList.add('on');
+}
+function fillSheet(key){
+  const p = byKey[key]; if(!p) return;
   $('#shName').textContent = p.name;
   const bits = [`${p.team} · ${p.pos}${p.posRank} · Tier ${p.tier} · ADP ${p.adp}${p.bye?' · Bye '+p.bye:''}`];
   if(p.boomBlend!=null){
@@ -1368,7 +1498,16 @@ function openSheet(key){
   if(p.inj) bits.push(`<span style="color:var(--bad)">${esc(p.inj)}${p.injBody?' · '+esc(p.injBody):''} — expected to miss time</span>`);
   if(S.taken[key]) bits.push(`<b style="color:var(--warn)">already ${S.taken[key]==='me'?'yours':'taken'}</b>`);
   $('#shSub').innerHTML = bits.join('<br>');
-  $('#veil').classList.add('on'); $('#sheet').classList.add('on');
+  // he may have been drafted by someone else while this sheet sat open
+  const gone = S.taken[key] && S.taken[key] !== 'me';
+  $('#shMine').hidden = !!S.taken[key];
+  $('#shGone').hidden = !!S.taken[key];
+  $('#shTaken').hidden = !gone;
+  if(gone){
+    const at = (S.order.find(o=>o.key===key)||{}).pick;
+    $('#shTaken').textContent = at ? `Taken at ${fmtPick(at)} — pick someone else` : 'Already taken — pick someone else';
+  }
+  $('#shBack').textContent = S.taken[key] ? 'Close' : 'Cancel';
 }
 function closeSheet(){ $('#veil').classList.remove('on'); $('#sheet').classList.remove('on'); sheetKey=null; }
 
@@ -1388,9 +1527,12 @@ document.addEventListener('click', e=>{
 });
 $('#veil').onclick = closeSheet;
 $('#shBack').onclick = closeSheet;
+$('#recDraft').onclick = ()=>{ if(recKey) take(recKey,'me'); };
+$('#recName').onclick = ()=>{ if(recKey) openSheet(recKey); };
 $('#shMine').onclick = ()=>{ if(sheetKey) take(sheetKey,'me'); closeSheet(); };
 $('#shGone').onclick = ()=>{ if(sheetKey) take(sheetKey,'them'); closeSheet(); };
-$('#search').oninput = renderBoard;
+$('#search').oninput = ()=>renderBoard(true);
+$('#boardPill').onclick = ()=>{ renderBoard(true); };
 
 $('#btnFindLeagues').onclick = findLeagues;
 $('#btnStopSync').onclick = ()=>{ stopPoll(); $('#syncMsg').textContent='Sync stopped — you are in manual mode.'; };
@@ -1427,7 +1569,7 @@ $('#btnReset').onclick = ()=>{
     save(); render();
   };
 });
-$('#cfgScoring').onchange = e=>{ S.scoring=parseFloat(e.target.value); save(); buildPlayers(); render(); };
+// Scoring is a property of the pasted ranking source, not a knob.
 $('#cfgMode').onchange = e=>{ S.mode=e.target.value; save(); buildPlayers(); render(); };
 $('#cfgSwing').oninput = e=>{
   S.bbSwing = +e.target.value/100; $('#bbVal').textContent = e.target.value+'%';
