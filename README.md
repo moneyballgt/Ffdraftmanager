@@ -7,6 +7,25 @@ No accounts, no server, no cost. One HTML file.
 
 ---
 
+## Hosting it (recommended)
+
+Serve the folder over http(s) — GitHub Pages, Netlify, Vercel, anything static. `index.html`,
+`sw.js`, `manifest.webmanifest` and the two icons must sit together. Hosting is not cosmetic;
+three things only work from a real origin:
+
+- **Live Sleeper sync.** A browser can only call the Sleeper API from an http(s) page. This is
+  the whole "never type a pick" feature, plus Sleeper's stock ranking, which is what the
+  survival maths runs on.
+- **Install to your home screen.** Opens full screen with no browser chrome, which is a
+  materially bigger board on a phone.
+- **Works offline.** A service worker precaches the app, so it opens and runs with no signal —
+  draft halls have bad wifi. Live picks are deliberately never cached: they always hit the
+  network and say so if they can't, rather than quietly showing you a stale board.
+
+Also hosted-only: **Keep screen awake** in Setup, so the phone doesn't lock while you wait,
+and a **sync freshness line** in the header — "live · updated 3s ago", turning amber and then
+red as it ages, and saying plainly when you're offline and the board is frozen.
+
 ## Use it tonight
 
 **Open `index.html` in your phone or laptop browser.** That's it. Everything runs locally

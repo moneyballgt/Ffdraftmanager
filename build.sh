@@ -17,6 +17,10 @@ cp src/app.html artifact.html
   echo '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
   echo '<meta name="color-scheme" content="dark">'
   echo '<meta name="apple-mobile-web-app-capable" content="yes">'
+  echo '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
+  echo '<meta name="theme-color" content="#0d1117">'
+  echo '<link rel="manifest" href="manifest.webmanifest">'
+  echo '<link rel="apple-touch-icon" href="icon-192.png">'
   echo '<style>html{color-scheme:dark}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>'
   echo '</head><body>'
   cat src/app.html

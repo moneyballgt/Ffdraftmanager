@@ -125,6 +125,10 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
 .feed div{display:flex;gap:7px}
 .feed .fp{color:var(--faint);width:38px;flex:none}
 .feed .fm{color:var(--go);font-weight:650}
+.syncline{padding:3px 12px 5px;font-size:11px;color:var(--faint);letter-spacing:.02em}
+.syncline.ok{color:var(--go)}
+.syncline.stale{color:var(--warn)}
+.syncline.bad{color:var(--bad);font-weight:650}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 :focus-visible{outline:2px solid var(--go);outline-offset:2px;border-radius:6px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -143,6 +147,7 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
     </div>
     <div class="dot" id="hDot" title="sync"></div>
   </div>
+  <div class="syncline" id="hSync"></div>
   <div class="clock wait" id="hClock">Set your draft slot in Setup</div>
 </header>
 
@@ -243,6 +248,12 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
         <button class="btn" id="btnClearEcr">Clear</button>
       </div>
       <div class="hint" id="ecrMsg"></div>
+    </div>
+    <div class="card">
+      <div class="lbl">During the draft</div>
+      <button class="btn" id="btnAwake" style="width:100%">Keep screen awake</button>
+      <div class="hint" id="awakeState">off</div>
+      <div class="hint" id="installHint" style="margin-top:8px"></div>
     </div>
     <div class="card">
       <div class="lbl">Player data</div>
@@ -1217,6 +1228,9 @@ function renderHeader(){
   $('#hSlot').textContent = S.slot ? `Slot ${S.slot} of ${S.teams}` : 'Slot not set';
   $('#hNext').textContent = nx ? 'You: '+fmtPick(nx) : '';
   $('#hDot').className = 'dot' + (pollTimer?' live':'');
+  const sy = syncState(), sl = $('#hSync');
+  if(sl){ sl.textContent = sy.txt; sl.className = 'syncline ' + sy.cls;
+          sl.style.display = S.draftId ? 'block' : 'none'; }
 
   const c = $('#hClock');
   if(!S.slot){ c.className='clock wait'; c.textContent='Set your draft slot in Setup →'; return; }
@@ -1372,6 +1386,8 @@ $('#btnFindLeagues').onclick = findLeagues;
 $('#btnStopSync').onclick = ()=>{ stopPoll(); $('#syncMsg').textContent='Sync stopped — you are in manual mode.'; };
 $('#btnUseDraftId').onclick = ()=>{ const v=$('#draftId').value.trim(); if(v) connectDraft(v); };
 $('#btnRefreshPlayers').onclick = ()=> loadSleeperPlayers(true);
+$('#btnAwake').onclick = ()=>{ S.awake = !S.awake; save(); keepAwake(S.awake);
+  $('#btnAwake').textContent = S.awake ? 'Let screen sleep' : 'Keep screen awake'; };
 $('#btnLoadEcr').onclick = ()=>{
   const txt = $('#ecrPaste').value;
   const list = parseRankings(txt);
@@ -1408,11 +1424,59 @@ $('#cfgSwing').oninput = e=>{
   save(); buildPlayers(); render();
 };
 
+
+/* ==================== HOSTED-ONLY CAPABILITIES ====================
+   These need a real http(s) origin. On file:// or inside a sandboxed
+   embed they are simply skipped, and the app behaves exactly as before. */
+const HOSTED = location.protocol === 'http:' || location.protocol === 'https:';
+
+if(HOSTED && 'serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});   // absent = fine
+  });
+}
+
+/* Keep the screen on. A draft turn arrives with no warning and a locked
+   phone costs the pick. Released automatically when the tab is hidden, so
+   it is re-requested on return. */
+let _wake = null;
+async function keepAwake(on){
+  try{
+    if(on && 'wakeLock' in navigator){ _wake = await navigator.wakeLock.request('screen'); }
+    else if(_wake){ await _wake.release(); _wake = null; }
+  }catch(e){ _wake = null; }
+  const el = $('#awakeState');
+  if(el) el.textContent = !('wakeLock' in navigator) ? 'not supported in this browser'
+                        : on ? 'on — screen will stay lit' : 'off';
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && S.awake && !_wake) keepAwake(true);
+});
+
+/* Is what you are looking at actually current? */
+function syncState(){
+  if(!S.draftId) return {txt:'not connected', cls:''};
+  if(!pollTimer)  return {txt:'sync stopped', cls:'stale'};
+  if(!S.synced)   return {txt:'connecting…', cls:''};
+  const age = Math.round((Date.now()-S.synced)/1000);
+  if(!navigator.onLine) return {txt:'offline — picks are frozen', cls:'bad'};
+  if(age > 25) return {txt:`last update ${age}s ago — may be behind`, cls:'bad'};
+  if(age > 12) return {txt:`last update ${age}s ago`, cls:'stale'};
+  return {txt:`live · updated ${age}s ago`, cls:'ok'};
+}
+setInterval(()=>{ if(S.draftId) renderHeader(); }, 3000);
+window.addEventListener('online',  ()=>renderHeader());
+window.addEventListener('offline', ()=>renderHeader());
+
 /* ============================ INIT ============================ */
 load();
 $('#cfgTeams').value=S.teams; $('#cfgRounds').value=S.rounds;
 $('#cfgSlot').value=S.slot||''; $('#cfgScoring').value=String(S.scoring);
 $('#cfgMode').value=S.mode;
+if(S.awake){ $('#btnAwake').textContent='Let screen sleep'; keepAwake(true); } else keepAwake(false);
+$('#installHint').textContent = HOSTED
+  ? 'Hosted: live Sleeper sync is available, and you can install this to your home screen from the browser menu so it opens full screen and works offline.'
+  : 'Opened as a local file. Live Sleeper sync and home-screen install need this served over http(s).';
 $('#cfgSwing').value=Math.round((S.bbSwing==null?0.35:S.bbSwing)*100);
 $('#bbVal').textContent=Math.round((S.bbSwing==null?0.35:S.bbSwing)*100)+'%';
 if(S.ecr&&S.ecr.length) $('#ecrPaste').value = S.ecr.map(r=>`${r.rank}. ${r.name}${r.team?' ('+r.team+(r.pos?' - '+r.pos:'')+')':''}`).join('\n');
