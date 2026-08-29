@@ -71,36 +71,30 @@ with a legal, complete 16-man roster and no empty starting spots.
 
 ---
 
-## Seed it with real consensus rankings (do this)
+## The rankings
 
-The built-in projections are my own estimates and my knowledge stops in **May 2026** — so
-they carry no August camp news, injuries or holdouts. Fix that in about a minute:
+**The board ships seeded with FantasyPros consensus PPR top-250 (2026).** Nothing to paste,
+nothing to configure — open it and the board is already right. That list supplies every
+player's NFL team, consensus rank and bye week; consensus rank is used directly as ADP, so
+the pick-timing and survival math run on the real market rather than an estimate.
 
-1. Get a consensus PPR list — ask a Claude chat with web access for "the top 200 FantasyPros
-   consensus PPR rankings as plain text, one player per line with team and position", or copy
-   the table straight off their free rankings page.
-2. **Setup → Seed with consensus rankings** → paste → **Load rankings**.
+Projected points come from a positional curve assigned in consensus order: their ranking
+decides who sits where, a realistic full-PPR points curve supplies the scale that value over
+replacement, replacement level and tier breaks depend on. When Sleeper sync is on, live NFL
+teams and injury tags override the static ones, so a late trade or a Saturday injury tag
+still shows up.
+
+### Replacing or updating the rankings
+
+**Setup → Seed with consensus rankings** takes a pasted list and rebuilds the board the same
+way. Use it if you want a different source, or a fresher pull on draft morning.
 
 Almost any format parses — tab-separated table copy, `1. Ja'Marr Chase (CIN - WR)`,
-`1 Chase CIN WR`, or CSV. Bye-week and tier columns are ignored, and `Ravens D/ST`
-resolves to the Baltimore defense.
-
-**What it does with the list.** It reassigns each position's existing points curve in
-consensus order. Consensus sets *who ranks where*; the points scale that drives value over
-replacement, replacement level and tier breaks stays intact — so you get their opinion
-without losing the engine. Consensus order also becomes the ADP that powers pick timing.
-
-**It adds players I've never heard of.** Anyone in your list that isn't on the built-in
-board gets created with their team, position and a projection slotted into the curve at
-their consensus rank. Verified: a 200-line import matched 185 and added 15 unknown players,
-who then showed up as legitimate starters in simulated drafts. This is what closes the gap
-on rookies and post-cutoff moves.
-
-Paste 150+ names for a full board. With a short list the app says so and leaves everyone you
-omitted on the built-in ranking rather than burying them.
-
-Player pool, NFL teams, injury tags and market rank still come **live from Sleeper** when
-sync is on, regardless.
+`1 Chase CIN WR`, or CSV. Bye and tier columns are ignored, and `Ravens D/ST` resolves to
+the Baltimore defense. Players not already on the board get added with their team, position
+and a projection slotted into the curve at their consensus rank, so a list containing
+rookies the app has never seen still works. Paste 150+ names for a full board; with a
+shorter list it says so and leaves everyone you omitted on the built-in ranking.
 
 ## Files
 
