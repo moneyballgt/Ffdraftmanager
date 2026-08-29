@@ -7,52 +7,46 @@ No accounts, no server, no cost. One HTML file.
 
 ---
 
-## Hosting it (recommended)
+## Setup — do this once, before draft day
 
-Serve the folder over http(s) — GitHub Pages, Netlify, Vercel, anything static. `index.html`,
-`sw.js`, `manifest.webmanifest` and the two icons must sit together. Hosting is not cosmetic;
-three things only work from a real origin:
+**1. Put it online.** GitHub → this repo → **Settings → Pages**. Under *Build and deployment*
+set Source to *Deploy from a branch*, pick branch `claude/fantasy-draft-helper-r796fb` and
+folder `/ (root)`, then Save. Give it a minute; it will serve at
+`https://moneyballgt.github.io/Ffdraftmanager/`
 
-- **Live Sleeper sync.** A browser can only call the Sleeper API from an http(s) page. This is
-  the whole "never type a pick" feature, plus Sleeper's stock ranking, which is what the
-  survival maths runs on.
-- **Install to your home screen.** Opens full screen with no browser chrome, which is a
-  materially bigger board on a phone.
-- **Works offline.** A service worker precaches the app, so it opens and runs with no signal —
-  draft halls have bad wifi. Live picks are deliberately never cached: they always hit the
-  network and say so if they can't, rather than quietly showing you a stale board.
+Hosting is not cosmetic. A browser may only call the Sleeper API from an `http(s)` page, so
+automatic pick sync — and Sleeper's stock ranking, which the survival maths runs on — only
+work from a real address.
 
-Also hosted-only: **Keep screen awake** in Setup, so the phone doesn't lock while you wait,
-and a **sync freshness line** in the header — "live · updated 3s ago", turning amber and then
-red as it ages, and saying plainly when you're offline and the board is frozen.
+**2. Open that link on your phone and install it.** Safari: Share → *Add to Home Screen*.
+Chrome: ⋮ → *Add to Home screen*. Launch it from the icon after that: it opens full screen,
+which is a materially bigger board, and it keeps working with no signal.
 
-## Use it tonight
+**3. Connect it to your draft.** Setup → type your **Sleeper username** → **Find my draft** →
+tap your league. That reads your team count, rounds, scoring and **your draft slot** off the
+league. Nothing else to configure.
 
-**Open `index.html` in your phone or laptop browser.** That's it. Everything runs locally
-and the draft is saved as you go, so a refresh or a dead screen loses nothing.
+If the username lookup misbehaves, paste the draft URL (`sleeper.com/draft/nfl/…`) into the
+second box instead.
 
-### Turn on auto-sync (do this first)
+**4. Turn on *Keep screen awake*** in Setup, so the phone does not lock while you wait.
 
-You said you can't sit there typing every pick. You don't have to.
+**5. Check the four settings** are what you want — they ship correct for this league:
+Best ball · Baseline A · Reaches for QB and TE · Boom influence 20%.
 
-1. Go to **Setup**
-2. Type your **Sleeper username** → tap **Find my draft**
-3. Tap your league
+## On draft day
 
-From then on picks load themselves every 4 seconds straight from Sleeper. It also reads
-your team count, round count, scoring, and **your draft slot** off the league automatically.
-You never touch it again — just watch the **Pick** tab.
+Open it from the home-screen icon. The header should read **live · updated Ns ago** in green —
+that is the one thing worth glancing at, because it tells you the board is current rather than
+that polling is merely scheduled. Amber means it is getting stale, red means you are offline
+and the board is frozen.
 
-If username lookup misbehaves, paste the draft URL (`sleeper.com/draft/nfl/123456…`) into
-the second box instead.
+Then just watch the **Pick** tab. Picks load themselves; you never type one. When your turn
+comes the banner turns green and the recommendation carries a full-width **Draft [name]**
+button — one tap.
 
-### If sync isn't working
-
-Manual mode is two taps per pick: tap the player, then **Someone else took him** or
-**I drafted him**. Search finds anyone in three letters. The advice engine works
-identically either way.
-
----
+If sync ever drops, manual entry is two taps per pick from the Board tab, and hand-entered
+picks survive sync coming back.
 
 ## The four tabs
 
