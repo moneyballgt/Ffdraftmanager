@@ -829,7 +829,8 @@ const BYE_SWING_DEFAULT = 0.20;  // tiebreaker between comparable players, nothi
 const QB_BOOST_DEFAULT  = 0.35;  // share of the QB starter span handed to QB1
 
 const VAL_FLOOR = 90;    // points below replacement still worth something
-const INJ_SPOTS = 7;     // positional spots to dock a player expected to miss time
+// (an INJ_SPOTS rank-space dock lived here and was never referenced. The
+//  injury discount is taken in POINTS, after the curve — see injFactor.)
 const SIGMA = 8;              // ADP noise, in picks
 const LS = 'draftroom.v3';
 const LS_V2 = 'draftroom.v2';
@@ -1155,13 +1156,45 @@ let _byeW = () => 0;   // rebuilt by applyFormat; read by the explanation text
    directly instead would be worth +/-35% of 300 for an elite back and only
    +/-35% of 100 for a bench one, which inflates the top of every position
    and destroys the cross-position comparability that VORP depends on. */
-/* Sleeper designations, worst first. */
+/* Designation -> projection multiplier. 1 is "no opinion" and it is the
+   DEFAULT, which is the whole point of the table.
+
+   The static board column carries three hand-written designations. The LIVE
+   feeds carry a status field on everybody, so they emit strings the static
+   column never did — "Questionable", "Q", "Probable", "P", "GTD", "Active",
+   "Healthy", "" — and a catch-all `return 0.94` docks a player 6% for the
+   crime of having a status field that says he is fine. Unrecognised is a
+   no-op; only a designation we actually name moves a number.
+
+   Matched as a whole normalised TOKEN, never as a substring. The obvious
+   `/OUT|NA/.test(t)` is the trap: "questioNAble" contains "NA", so every
+   game-time decision on the board would be priced as ruled out. */
+const INJ_MULT = {
+  // out for weeks or the season
+  IR:0.45, IRR:0.45, PUP:0.45, NFI:0.45, DNR:0.45, SUS:0.45, SUSP:0.45, SUSPENDED:0.45,
+  // ruled out / not active for the coming week
+  OUT:0.72, O:0.72, NA:0.72, IL:0.72, COV:0.72,
+  DOUBTFUL:0.88, DOUBT:0.88, D:0.88,
+  /* Questionable is a real designation, not an unknown one, so it is priced —
+     but at the mildest rung. About a quarter of them sit, and in guillotine a
+     sit is a zero week. Probable/GTD/Active/Healthy are deliberately ABSENT:
+     they fall through to 1. */
+  QUESTIONABLE:0.94, Q:0.94,
+};
 function injFactor(d){
-  const t = String(d).toUpperCase();
-  if(/IR|PUP|NFI|DNR|SUS/.test(t)) return 0.45;   // out for weeks or the season
-  if(/OUT|NA/.test(t))             return 0.72;
-  if(/DOUBT/.test(t))              return 0.88;
-  return 0.94;
+  if(!d) return 1;
+  // "IR-R" -> IRR, "Out " -> OUT, "Q" -> Q. Anything left unmatched: 1.
+  const t = String(d).toUpperCase().replace(/[^A-Z]/g,'');
+  return INJ_MULT[t] || 1;
+}
+
+/* A player can carry BOTH the static column (p.inj) and a live feed tag
+   (p.injury) — Sleeper and Yahoo both write p.injury on every merge. Take the
+   worse of the two, ONCE. Multiplying them prices a known ACL at 0.45*0.45 and
+   buries a startable back under undrafted rookies. */
+function injView(p){
+  const a = injFactor(p.inj), b = injFactor(p.injury);
+  return b < a ? {f:b, tag:p.injury} : {f:a, tag:p.inj};
 }
 function applyFormat(){
   const bb = S.mode==='bestball', gl = S.mode==='guillotine';
@@ -1204,9 +1237,23 @@ function applyFormat(){
     });
     list.sort((a,b)=> a._k - b._k || (a.ecrPosRank||999) - (b.ecrPosRank||999));
     list.forEach((p,i)=>{ p.proj = curve[i]; });
-    // Applied to points AFTER the curve so the boom shift cannot cancel it,
-    // and scaled by severity — a reconstructed ACL is not a one-week hamstring.
-    list.forEach(p=>{ if(p.inj) p.proj = Math.round(p.proj * injFactor(p.inj)); });
+    /* Applied to points AFTER the curve so the boom shift cannot cancel it,
+       and scaled by severity — a reconstructed ACL is not a one-week hamstring.
+
+       CANNOT COMPOUND across runs, and that is structural rather than lucky:
+       the line above hands out `curve`, built fresh from p.base, so p.proj is
+       fully REASSIGNED on every applyFormat() before this line reads it. Only
+       applyEcr() ever writes p.base, and it writes the un-discounted curve.
+       So the poll loop — merge Sleeper/Yahoo metadata, buildPlayers(),
+       applyFormat() — re-derives the same number every four seconds instead of
+       shaving 28% off it again. Discounting p.proj in place from the merge
+       handler, which is the obvious alternative, would decay to zero by lunch. */
+    list.forEach(p=>{
+      const iv = injView(p);
+      p.injMult = iv.f;
+      p.injTag  = iv.f < 1 ? iv.tag : null;   // what the explanation text quotes
+      if(iv.f < 1) p.proj = Math.round(p.proj * iv.f);
+    });
     /* The QB premium is the one adjustment that CANNOT be made in rank space.
        A rank shift only reshuffles quarterbacks against each other and hands
        the same curve back out, so the position's value against RB and WR is
@@ -1829,7 +1876,10 @@ function reasonFor(e){
     if(p.pos==='QB' && p.posRank<=4)
       bits.push(`<b>QB${p.posRank}</b> — the steadiest weekly score this format lets you roster`);
   }
-  if(p.inj) bits.push(`<b style="color:var(--bad)">${esc(p.inj)}</b> — will miss time`);
+  // p.injTag, not p.inj: the tag that actually MOVED the number, whether it
+  // came off the static column or off Yahoo/Sleeper this morning. The row
+  // already prints the designation; this line is why he fell.
+  if(p.injTag) bits.push(`<b style="color:var(--bad)">${esc(p.injTag)}</b> — projection cut ${Math.round((1-p.injMult)*100)}%`);
   bits.push(`${p.vorp>0?'+':''}${p.vorp} pts over replacement`);
   return bits.join(' · ');
 }
@@ -1977,12 +2027,48 @@ function adoptRosterPositions(list, src){
   S.roster = r; S.bench = bench;
 }
 
+/* ADOPTING TEAM COUNT AND ROUNDS FROM THE PLATFORM.
+   Both connect paths used to assign S.teams/S.rounds inline and silently, and
+   of the four things a league can change out from under him this is the
+   damaging pair: replacement level is teams x starters, so a 9 -> 12 adoption
+   moves EVERY VORP on the board, and rounds decides how deep "draftable" runs.
+   Silent was also inconsistent — roster and slot already announce themselves.
+
+   Same shape as adoptRosterPositions/adoptSlot on purpose: record from/to,
+   apply, let renderAdopted() show one banner with one undo. A second pattern
+   here would mean two ways to undo an adoption and a Setup tab that reads like
+   two different apps.
+
+   Guarded like the other two: only real in-range numbers, nothing announced
+   when nothing changed, and shapeKeep is sticky so "keep mine" survives the
+   reconnect on the next reload instead of lasting one page load. */
+function adoptShape(teams, rounds, src){
+  if(S.shapeKeep) return;
+  const t = parseInt(teams,10), r = parseInt(rounds,10);
+  const okT = t >= 2  && t <= 20;
+  const okR = r >= 1  && r <= 40;
+  if(!okT && !okR) return;                   // league published neither
+  const from = {teams:S.teams, rounds:S.rounds, roundsAuto:S.roundsAuto !== false};
+  if(okT) S.teams = t;
+  // The league knows the real round count; stop deriving it from the roster.
+  if(okR){ S.rounds = r; S.roundsAuto = false; }
+  if(S.teams === from.teams && S.rounds === from.rounds) return;   // nothing changed
+  S.shapeAdopt = {src:src || 'Your league', from, to:{teams:S.teams, rounds:S.rounds}};
+}
+
 /* The one place that says, in the Setup tab, what a connected league changed
    out from under him — and offers it back. Rendered from state on every
    render, so a poll or a reload can never leave a stale claim on screen. */
 function renderAdopted(){
   const bits = [];
-  const ra = S.rosterAdopt, sa = S.slotAdopt;
+  const ra = S.rosterAdopt, sa = S.slotAdopt, sh = S.shapeAdopt;
+  // shape first: it is the one that repriced the whole board
+  if(sh) bits.push(`<span style="color:var(--warn)">${esc(sh.src)} set your league</span> to
+    <b>${sh.to.teams} teams · ${sh.to.rounds} rounds</b>. You had
+    <b>${sh.from.teams} teams · ${sh.from.rounds} rounds</b> — replacement level is teams × starters, so
+    that changes every value on the board.
+    <button class="lnk" id="btnShapeKeep">Keep mine instead</button> ·
+    <button class="lnk" id="btnShapeOk">Use theirs</button>`);
   if(ra) bits.push(`<span style="color:var(--warn)">${esc(ra.src)} set your starting lineup</span> to
     <b>${esc(rosterLabel(ra.to.roster, ra.to.bench))}</b>. You had
     <b>${esc(rosterLabel(ra.from.roster, ra.from.bench))}</b> — and that changes replacement level, so it
@@ -2003,9 +2089,8 @@ async function connectDraft(id){
   $('#syncMsg').textContent = 'Connecting to draft '+id+'…';
   try{
     const d = await j('draft/'+id);
-    S.teams  = d.settings.teams  || S.teams;
-    // Sleeper knows the real round count; stop deriving it from here on.
-    if(d.settings.rounds){ S.rounds = d.settings.rounds; S.roundsAuto = false; }
+    // teams before slot: adoptSlot range-checks against S.teams.
+    adoptShape(d.settings.teams, d.settings.rounds, 'Sleeper');
     if(d.draft_order && S.userId) adoptSlot(d.draft_order[S.userId], 'Sleeper');
     if(d.league_id){
       try{
@@ -2235,8 +2320,8 @@ async function connectYahoo(key){
   msg.textContent = 'Connecting…';
   try{
     const d = await srv('draft/' + encodeURIComponent(key));
-    if(d.teams)  S.teams = d.teams;
-    if(d.rounds){ S.rounds = d.rounds; S.roundsAuto = false; }
+    // teams before slot: adoptSlot range-checks against S.teams.
+    adoptShape(d.teams, d.rounds, 'Yahoo');
     adoptSlot(d.slot, 'Yahoo');
     if(d.scoring != null){
       S.scoring = d.scoring;
@@ -2644,7 +2729,9 @@ function fillSheet(key){
     if(p.fl <= -0.9) bits.push(`<span style="color:var(--bad)">Low floor — ${p.gm} games, swing ${Math.round(p.cv*100)}% of average</span>`);
     if(p.byeRisk >= 0.6) bits.push(`<span style="color:var(--warn)">Week ${p.bye} bye — early, and the early ones are the ones waivers cannot cover</span>`);
   }
-  if(p.inj) bits.push(`<span style="color:var(--bad)">${esc(p.inj)}${p.injBody?' · '+esc(p.injBody):''} — expected to miss time</span>`);
+  // injBody is static-column detail ("Knee - ACL") and only ever exists next
+  // to p.inj, so it is shown only when p.inj is the tag doing the work.
+  if(p.injTag) bits.push(`<span style="color:var(--bad)">${esc(p.injTag)}${(p.injBody && p.injTag===p.inj)?' · '+esc(p.injBody):''} — projection cut ${Math.round((1-p.injMult)*100)}%</span>`);
   if(S.taken[key]) bits.push(`<b style="color:var(--warn)">already ${S.taken[key]==='me'?'yours':'taken'}</b>`);
   $('#shSub').innerHTML = bits.join('<br>');
   // he may have been drafted by someone else while this sheet sat open
@@ -2680,9 +2767,18 @@ document.addEventListener('click', e=>{
   if(e.target.id === 'btnMigOk'){ delete S.migrated; save(); renderSetup(); return; }
   if(e.target.id === 'btnYhLeagues'){ findYahooLeagues(); return; }
   if(e.target.id === 'btnYhStop'){ stopPoll(); $('#yhMsg').textContent='Sync stopped — you are in manual mode.'; renderYahoo(); return; }
-  /* Adoption undo. rosterKeep/slotKeep are sticky: a reconnect on the next
-     reload would otherwise take the league's answer straight back again and
-     his "keep mine" would last exactly one page load. */
+  /* Adoption undo. rosterKeep/slotKeep/shapeKeep are sticky: a reconnect on
+     the next reload would otherwise take the league's answer straight back
+     again and his "keep mine" would last exactly one page load. */
+  /* roundsAuto has to come back too, not just the number. Restoring rounds
+     alone leaves roundsAuto pinned false, so his rounds silently stop
+     following the roster the next time he edits a starting slot. applyShape()
+     re-derives replacement level off the restored teams count, which is the
+     point of the undo — the board is repriced, not just the Setup fields. */
+  if(e.target.id === 'btnShapeKeep'){ const a=S.shapeAdopt; S.shapeKeep=true; delete S.shapeAdopt;
+    if(a){ S.teams=a.from.teams; S.rounds=a.from.rounds; S.roundsAuto=a.from.roundsAuto; }
+    applyShape(); return; }
+  if(e.target.id === 'btnShapeOk'){ delete S.shapeAdopt; save(); renderSetup(); return; }
   if(e.target.id === 'btnRosKeep'){ const a=S.rosterAdopt; S.rosterKeep=true; delete S.rosterAdopt;
     if(a){ S.roster=a.from.roster; S.bench=a.from.bench; } applyShape(); return; }
   if(e.target.id === 'btnRosOk'){ delete S.rosterAdopt; save(); renderSetup(); return; }
