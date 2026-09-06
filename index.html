@@ -285,6 +285,7 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
       <select id="cfgScoring" disabled style="opacity:.55;margin-top:5px"><option>Full PPR (from the ranking source)</option></select>
       <div class="hint" style="margin-top:10px">Format</div>
       <select id="cfgMode" style="margin-top:5px">
+        <option value="guillotine">Guillotine — low team is eliminated weekly</option>
         <option value="bestball">Best ball — auto lineup, ceiling wins</option>
         <option value="redraft">Redraft — you set the lineup weekly</option>
       </select>
@@ -307,19 +308,50 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
       A is the number derived from your lineup, B counts weekly starters only and runs
       RB-heavy, C counts everyone rostered and pushes TE and QB out of the early rounds.</div>
       <div class="hint" id="cfgReplRanks" style="margin-top:9px"></div>
-      <div class="hint" style="margin-top:12px">Boom influence — <b id="bbVal">20%</b></div>
-      <input id="cfgSwing" type="range" min="0" max="60" step="5" value="20"
-        style="width:100%;padding:0;margin-top:6px;accent-color:var(--go);background:none;border:none">
-      <div class="hint" style="margin-top:2px">0% = pure expert consensus. Higher lets 2024-25 spike-week
-      rates move players within their position. The data is backward-looking, so it says nothing about
-      rookies and can misjudge anyone whose situation changed.</div>
-      <div class="hint" style="margin-top:10px">Best ball rewards spike weeks, so boom rate and
-      ceiling move the board, QB2 is a real pick, and bench RB/WR keep value. Redraft ignores
-      the boom layer and treats a backup QB as dead weight.</div>
+      <!-- Only the sliders that do something in the current format are shown. A
+           boom slider in guillotine (or in redraft, where it was always inert)
+           reads as a knob he has failed to turn, and on the clock that is worse
+           than not offering it. -->
+      <div id="cfgBoomBox" hidden>
+        <div class="hint" style="margin-top:12px">Boom influence — <b id="bbVal">20%</b></div>
+        <input id="cfgSwing" type="range" min="0" max="60" step="5" value="20"
+          style="width:100%;padding:0;margin-top:6px;accent-color:var(--go);background:none;border:none">
+        <div class="hint" style="margin-top:2px">0% = pure expert consensus. Higher lets 2024-25 spike-week
+        rates move players within their position. The data is backward-looking, so it says nothing about
+        rookies and can misjudge anyone whose situation changed.</div>
+      </div>
+      <div id="cfgGuilBox" hidden>
+        <div class="hint" style="margin-top:12px">Floor influence — <b id="flVal">25%</b></div>
+        <input id="cfgFlSwing" type="range" min="0" max="60" step="5" value="25"
+          style="width:100%;padding:0;margin-top:6px;accent-color:var(--go);background:none;border:none">
+        <div class="hint" style="margin-top:2px">How far week-to-week consistency and games played may move
+        a player inside his position. One bottom score ends your season and there is no next week to make it
+        back, so a volatile player and a player who misses a game are the same problem here.</div>
+        <div class="hint" style="margin-top:12px">Early-bye penalty — <b id="byVal">20%</b></div>
+        <input id="cfgByeSwing" type="range" min="0" max="40" step="5" value="20"
+          style="width:100%;padding:0;margin-top:6px;accent-color:var(--go);background:none;border:none">
+        <div class="hint" style="margin-top:2px">A week-5 bye is the dangerous one — your bench is as thin as
+        it will ever be, almost nobody has been guillotined yet and there is nothing on waivers to cover the
+        hole. By week 12 several whole rosters have hit FAAB and a bye is free. Tiebreaker between similar
+        players, not a reason to reach.</div>
+        <div class="hint" style="margin-top:12px">Top-QB premium — <b id="qbVal">35%</b></div>
+        <input id="cfgQbBoost" type="range" min="0" max="80" step="5" value="35"
+          style="width:100%;padding:0;margin-top:6px;accent-color:var(--go);background:none;border:none">
+        <div class="hint" style="margin-top:2px">QB is the steadiest weekly score on the board and every team
+        starts one. This lifts only the quarterbacks worth reaching for and fades to nothing by the last
+        starter, so it never inflates QB10–QB25 and never moves replacement level.</div>
+      </div>
+      <div class="hint" style="margin-top:10px">Guillotine is a weekly-lineup format that punishes one bad
+      week harder than it rewards a great one, so floor, availability and a late bye move the board and a
+      backup QB is dead weight. Best ball rewards spike weeks, so boom rate and ceiling move the board,
+      QB2 is a real pick, and bench RB/WR keep value. Redraft sits between them and ignores both layers.</div>
     </div>
     <div class="card">
       <div class="lbl">Seed with consensus rankings</div>
-      <div class="hint" style="margin:0 0 9px">Paste any ranking list — FantasyPros consensus, Sleeper, anywhere. Almost any format works. This <b>replaces the built-in order</b> and adds players the app doesn't know about.</div>
+      <div class="hint" style="margin:0 0 9px">Paste any ranking list — FantasyPros consensus, Sleeper, anywhere. Almost any format works. This <b>replaces the built-in order</b> and adds players the app doesn't know about.
+      <br><b style="color:var(--warn)">It also replaces the format layer.</b> A pasted list is taken as the
+      final word on order, so the floor, bye and QB weighting above stop moving anyone. Leave this empty to
+      draft off the guillotine-weighted board.</div>
       <textarea id="ecrPaste" rows="5" placeholder="1. Ja'Marr Chase (CIN - WR)&#10;2. Bijan Robinson (ATL - RB)&#10;3. Justin Jefferson (MIN - WR)&#10;..." style="width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px;color:var(--tx);font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none;resize:vertical"></textarea>
       <div class="row2" style="margin-top:8px">
         <button class="btn pri" id="btnLoadEcr">Load rankings</button>
@@ -726,7 +758,13 @@ const REPL_TUNE = {
   C: {QB:1.85, RB:1.70, WR:1.80, TE:1.75}
 };
 
-/* Replacement RANK per position — an index into that position's board. */
+/* Replacement RANK per position — an index into that position's board.
+   Guillotine deliberately takes the REDRAFT path here, not the best-ball one.
+   Best-ball depth exists because the auto-lineup banks every player's best
+   week, so a bench receiver is a live scoring asset. Guillotine is the exact
+   opposite bargain: you set one lineup a week and the week it goes wrong is
+   the week you are eliminated. Depth you cannot start on the day is worth
+   nothing to you, so replacement level is the weekly-starter count. */
 function replRanks(){
   const r = S.roster, bb = S.mode === 'bestball';
   const tune = REPL_TUNE[S.repl] || REPL_TUNE.A;
@@ -752,6 +790,28 @@ const W = {boom:0.45, ceil:0.25, ppg:0.30, cv:0.22};   // cv = best ball only
 const MIN_GM = 8;
 const BB_UNIT = 0.58;   // pooled residual SD, so all positions share one scale        // below this, spike-week rate is low-sample and gets regressed
 const BB_SWING_DEFAULT = 0.20;  // how far a boom profile may move a player's value
+
+/* ---- guillotine ----
+   Weekly floor weights. NOT the inverse of the boom composite: -bb rewards a
+   low ceiling and a low boom rate, which describes a bad player as readily as
+   a safe one. Floor is its own thing, built from the fields that actually
+   describe a bad week.
+     cv   sd/ppg — the direct measure of how far down the bad weeks go, and the
+          only volatility number on the board. Biggest single weight.
+     gm   games played. Availability is the largest floor risk there is: a
+          player who misses a week hands you a zero at that spot, and in this
+          format a zero is not a lost week, it is the season. Weighted nearly
+          as hard as volatility on purpose.
+     ppg  small, and only to stop a low-variance non-scorer from grading out
+          above a high-volume producer. Consistency at 6 points a week is not
+          a floor, it is a hole you start every week. */
+const WF = {cv:0.40, gm:0.35, ppg:0.25};
+const FL_UNIT = 0.49;    // pooled residual SD measured off this board, as BB_UNIT is
+const FL_SWING_DEFAULT  = 0.25;  // floor gets a touch more authority than boom does in
+                                 // best ball — it is this format's whole thesis
+const BYE_SWING_DEFAULT = 0.20;  // tiebreaker between comparable players, nothing more
+const QB_BOOST_DEFAULT  = 0.35;  // share of the QB starter span handed to QB1
+
 const VAL_FLOOR = 90;    // points below replacement still worth something
 const INJ_SPOTS = 7;     // positional spots to dock a player expected to miss time
 const SIGMA = 8;              // ADP noise, in picks
@@ -765,7 +825,8 @@ let S = {
      stay derived until Sleeper or a hand edit pins them. */
   teams:DEFAULT_TEAMS, roster:Object.assign({},DEFAULT_ROSTER), bench:DEFAULT_BENCH,
   rounds:14, roundsAuto:true,
-  slot:null, scoring:1, mode:'bestball', bbSwing:0.20, repl:'A', reach:'qbte',
+  slot:null, scoring:1, mode:'guillotine', bbSwing:0.20, repl:'A', reach:'qbte',
+  flSwing:FL_SWING_DEFAULT, byeSwing:BYE_SWING_DEFAULT, qbBoost:QB_BOOST_DEFAULT,
   taken:{},          // key -> 'me' | 'them'
   manual:[],         // hand-entered picks, preserved across sync rebuilds
   order:[],          // [{key,by,pick}] chronological
@@ -805,7 +866,7 @@ const norm = s => String(s).toLowerCase()
    v2 is left in localStorage rather than deleted — it costs nothing and it is
    the only copy of a draft in progress if this upgrade lands mid-draft. */
 function save(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
-const V2_KEEP = ['slot','scoring','mode','bbSwing','repl','reach',
+const V2_KEEP = ['slot','scoring','mode','bbSwing','flSwing','byeSwing','qbBoost','repl','reach',
                  'draftId','userId','sleeperSlot','ecr','awake'];
 function load(){
   try{
@@ -861,6 +922,7 @@ function buildPlayers(){
      .forEach((p,i)=> p.ecrPosRank = i+1);
   });
   computeBoom();
+  computeFloor();
   // NOTE: projections come from consensus RANK, not a points model, so there
   // is nothing here for a scoring multiplier to act on. The board is full-PPR
   // because its ranking source is; another format needs different rankings
@@ -952,6 +1014,83 @@ function computeBoom(){
   P.filter(p=>p.bb==null).forEach(p=> p.bb = 0);
 }
 
+/* Weekly floor, for guillotine. Same shape as computeBoom deliberately —
+   z-scores inside the position, regressed on consensus rank, kept in raw
+   composite units and divided by one pooled scale — so p.fl and p.bb are the
+   same size of thing and the two swing sliders mean the same thing.
+
+   Cohort is players with a usable 2025 game log (gm > 0). The 52 rookies and
+   the 3 men whose only history is 2024 are NOT in it: their gm is 0 because
+   the column is blank, and blank must never read as "never played". Left in,
+   they would also drag the games-played mean down and shrink its spread,
+   which quietly costs the availability term most of its bite. They score 0 —
+   no opinion — which is the honest answer for a player with no game log.
+
+   The reliability split is the point of this function. A 7-game sample says
+   nothing trustworthy about a man's weekly RATE, so cv and ppg are regressed
+   toward neutral exactly as MIN_GM demands. It says everything about his
+   AVAILABILITY — 7 games is not a small sample of games played, it is the
+   observed fact that he missed ten. Regressing that term too would hand the
+   softest floor grade to the very players whose season fell apart, which is
+   backwards in the one format where a zero eliminates you. */
+function computeFloor(){
+  VPOS.forEach(pos=>{
+    const list = P.filter(p=>p.pos===pos && p.hasHistory && p.gm > 0);
+    if(list.length < 8){ list.forEach(p=>p.fl=0); return; }
+    const z = f => {
+      const v = list.map(f), m = v.reduce((a,b)=>a+b,0)/v.length;
+      const sd = Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/v.length) || 1;
+      return x => (x-m)/sd;
+    };
+    const zv=z(p=>p.cv), zg=z(p=>p.gm), zp=z(p=>p.ppg);
+    list.forEach(p=>{
+      const rel = Math.max(0, Math.min(1, (p.gm - 3) / 11));
+      // high cv is volatility, so it enters NEGATIVE: safe is the good end
+      p._fraw = (-WF.cv*zv(p.cv) + WF.ppg*zp(p.ppg)) * rel + WF.gm*zg(p.gm);
+    });
+    // Consensus already docks the injury-prone and the erratic. Keep only the
+    // residual, or the shift charges a player twice for the same flaw.
+    const n = list.length;
+    const xs = list.map(p=>p.ecrPosRank), ys = list.map(p=>p._fraw);
+    const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+    let sxy=0, sxx=0;
+    for(let i=0;i<n;i++){ sxy += (xs[i]-mx)*(ys[i]-my); sxx += (xs[i]-mx)*(xs[i]-mx); }
+    const slope = sxx ? sxy/sxx : 0, intercept = my - slope*mx;
+    const res = list.map(p=> p._fraw - (intercept + slope*p.ecrPosRank));
+    const rm = res.reduce((a,b)=>a+b,0)/n;
+    list.forEach((p,i)=>{ p.fl = (res[i]-rm) / FL_UNIT; });
+  });
+  P.filter(p=>p.fl==null).forEach(p=> p.fl = 0);
+}
+
+/* How much an early bye hurts, 1 at the earliest bye on the board down to 0
+   once it stops mattering. The penalty is NOT about the missing week — every
+   bye costs one week. It is about what you can do about it. In week 5 your
+   roster is as thin as it will ever be, barely anyone has been guillotined,
+   and the FAAB pool is bare: you cover the hole off your own bench or you
+   start a hole. By week 12 several teams have been eliminated and their
+   ENTIRE rosters, studs included, are sitting in FAAB with fewer rivals left
+   to outbid you. So the penalty tracks replacement difficulty, and
+   replacement difficulty decays as the season eats teams.
+
+   Both endpoints are read off the data instead of typed in: the first bye is
+   whatever the board actually contains, and the week it stops mattering is
+   the week all but one rival has been guillotined — teams-2 eliminations
+   after the first bye. For this 9-team league that lands on week 12, which is
+   where it should be; a 12-team guillotine thins out more slowly and gets a
+   later zero, which is also right. */
+function byeWeights(){
+  const wks = P.map(p=>p.bye).filter(b=>b > 0);
+  if(!wks.length) return ()=>0;
+  const first = Math.min(...wks);
+  const safe = first + Math.max(1, S.teams - 2);
+  // No bye on file means NO OPINION, never week 0 — a missing value that
+  // sorts as the earliest possible bye would hand the maximum penalty to
+  // exactly the players we know least about.
+  return b => (b > 0 ? Math.max(0, Math.min(1, (safe - b) / (safe - first))) : 0);
+}
+let _byeW = () => 0;   // rebuilt by applyFormat; read by the explanation text
+
 /* Apply format to the consensus baseline.
    The adjustment moves a player in RANK space and then hands out the
    position's existing points curve in the new order. Scaling the points
@@ -967,18 +1106,42 @@ function injFactor(d){
   return 0.94;
 }
 function applyFormat(){
-  const bb = S.mode==='bestball';
-  const sw = S.bbSwing==null ? BB_SWING_DEFAULT : S.bbSwing;
+  const bb = S.mode==='bestball', gl = S.mode==='guillotine';
+  const sw  = S.bbSwing==null  ? BB_SWING_DEFAULT  : S.bbSwing;
+  const fsw = S.flSwing==null  ? FL_SWING_DEFAULT  : S.flSwing;
+  const bsw = S.byeSwing==null ? BYE_SWING_DEFAULT : S.byeSwing;
+  const qbb = S.qbBoost==null  ? QB_BOOST_DEFAULT  : S.qbBoost;
+  _byeW = byeWeights();
+  const REPL = replRanks();
   POS.forEach(pos=>{
     const list = P.filter(p=>p.pos===pos);
     if(!list.length) return;
     const curve = list.map(p=>p.base).sort((a,b)=>b-a);
     list.forEach(p=>{
       const r = p.ecrPosRank || 999;
-      let shift = 0;
       // room to move grows with rank: WR1 has nowhere to climb, WR50 does
-      if(bb && p.bb) shift = -sw * (6 + 0.30*r) * Math.max(-2, Math.min(2, p.bb));
-
+      const room = 6 + 0.30*r;
+      p.byeRisk = _byeW(p.bye);
+      let shift = 0;
+      if(bb && p.bb) shift = -sw * room * Math.max(-2, Math.min(2, p.bb));
+      if(gl){
+        /* Both guillotine adjustments fade out past replacement level.
+           Nobody in a 9-team, 14-round league ever rosters the 2x-replacement
+           player, his week-5 bye is a hole he will not be on the roster to
+           leave, and his floor grade is where the data is worst: cv is
+           sd/ppg, so a 5-points-a-week man's own tiny denominator inflates
+           his volatility on arithmetic alone. Full weight through the last
+           startable player at the position, nothing by twice that depth —
+           which keeps the reshuffling where the draft is actually decided
+           instead of letting the bottom of the board churn. */
+        const deep = REPL[pos] || 1;
+        const live = Math.max(0, Math.min(1, (2*deep - r)/deep));
+        // a negative shift moves a player UP, so the sign here is the whole
+        // inversion: best ball pays for spike weeks, guillotine pays for
+        // showing up and scoring the same number every Sunday
+        if(p.fl) shift -= fsw * room * live * Math.max(-2, Math.min(2, p.fl));
+        shift += bsw * room * live * p.byeRisk;
+      }
       p._k = r + shift;
     });
     list.sort((a,b)=> a._k - b._k || (a.ecrPosRank||999) - (b.ecrPosRank||999));
@@ -986,6 +1149,30 @@ function applyFormat(){
     // Applied to points AFTER the curve so the boom shift cannot cancel it,
     // and scaled by severity — a reconstructed ACL is not a one-week hamstring.
     list.forEach(p=>{ if(p.inj) p.proj = Math.round(p.proj * injFactor(p.inj)); });
+    /* The QB premium is the one adjustment that CANNOT be made in rank space.
+       A rank shift only reshuffles quarterbacks against each other and hands
+       the same curve back out, so the position's value against RB and WR is
+       untouched — and it is that cross-position comparison the premium is
+       about. Pushing the QB replacement rank deeper would move it, and that
+       is the documented trap: it lifts every quarterback on the board and
+       buries the rest of the roster under a position you start one of.
+
+       So: points, on the STARTERS only, tapering to exactly zero at the
+       replacement quarterback. QB1 gains a share of the top-to-replacement
+       span, QB10 and everyone behind him gain nothing, and because the man
+       defining replacement level is the man whose bonus is zero, the zero
+       point of every VORP in the app does not move. Monotone in rank, so it
+       reorders nobody and tiers and posRank come out unchanged. */
+    if(gl && pos==='QB' && qbb > 0){
+      const dep = Math.min(REPL.QB, list.length);
+      if(dep > 1){
+        const rk = list.slice().sort((a,b)=>b.proj-a.proj);
+        const span = rk[0].proj - rk[dep-1].proj;
+        if(span > 0) rk.forEach((p,i)=>{
+          p.proj = Math.round(p.proj + qbb * span * Math.max(0, 1 - i/(dep-1)));
+        });
+      }
+    }
     list.slice().sort((a,b)=>b.proj-a.proj)
         .forEach((p,i)=>{ p.posDelta = (p.ecrPosRank||i+1) - (i+1); });
   });
@@ -1531,6 +1718,25 @@ function reasonFor(e){
   }
   if(S.mode==='bestball' && p.boomBlend!=null && p.boomBlend>=45)
     bits.push(`booms <b>${Math.round(p.boomBlend)}%</b> of weeks (${p.ceil} pt ceiling)`);
+  /* Guillotine adds two things a rank cannot show — why the floor grade moved
+     him and how bad his bye is — so they get said in words. This line is what
+     he actually reads with the clock running; a slider he set an hour ago is
+     not going to remind him that his WR2 missed ten games. */
+  if(S.mode==='guillotine'){
+    const miss = p.hasHistory && p.gm ? Math.max(0, 17 - p.gm) : 0;
+    if(p.fl <= -0.9)
+      bits.push(miss >= 4
+        ? `<b style="color:var(--warn)">missed ${miss} games</b> in 2025 — one zero week ends a guillotine season`
+        : `<b style="color:var(--warn)">boom-or-bust</b> — weekly swing is ${Math.round(p.cv*100)}% of his own average`);
+    else if(p.fl >= 0.9)
+      bits.push(`<b>high floor</b> — ${p.gm} games, ${p.ppg} PPG, one of the steadier ${p.pos}s here`);
+    if(p.byeRisk >= 0.6)
+      bits.push(`<b style="color:var(--warn)">week ${p.bye} bye</b> — early, so few rosters have hit FAAB and you cover it off your own bench`);
+    else if(p.bye && p.byeRisk <= 0.05)
+      bits.push(`late <b>week ${p.bye} bye</b> — whole rosters will be in FAAB by then`);
+    if(p.pos==='QB' && p.posRank<=4)
+      bits.push(`<b>QB${p.posRank}</b> — the steadiest weekly score this format lets you roster`);
+  }
   if(p.inj) bits.push(`<b style="color:var(--bad)">${esc(p.inj)}</b> — will miss time`);
   bits.push(`${p.vorp>0?'+':''}${p.vorp} pts over replacement`);
   return bits.join(' · ');
@@ -1984,7 +2190,14 @@ function renderSetup(){
     + `${S.teams} teams × this lineup`
     + (S.roster.FLEX ? `, flex split 45% RB / 50% WR / 5% TE` : '')
     + (S.repl!=='A' ? `, baseline ${S.repl}` : '')
-    + (S.mode==='bestball' ? `, pushed deeper for best ball` : '') + `.`);
+    + (S.mode==='bestball' ? `, pushed deeper for best ball` : '')
+    + (S.mode==='guillotine' ? `, weekly-starter depth — guillotine does not get the
+       best-ball push, because depth you cannot start on Sunday cannot save you` : '') + `.`);
+  /* Only the live format's sliders are on screen, and they are painted here
+     rather than in the mode handler so that a Sleeper league update, a v2
+     migration or a reload all land on the same state as a tap. */
+  $('#cfgBoomBox').hidden = S.mode !== 'bestball';
+  $('#cfgGuilBox').hidden = S.mode !== 'guillotine';
   $('#cfgMigrated').hidden = !S.migrated;
   if(S.migrated) setHTML('#cfgMigrated', `<span style="color:var(--warn)">Settings carried over
     from an earlier version.</span> That version hardcoded a 12-team, 16-round roster with a K
@@ -2031,6 +2244,11 @@ function fillSheet(key){
     if(p.posDelta>=8) bits.push(`<span style="color:var(--go)">Spike-week data likes him ${p.posDelta} spots more than consensus</span>`);
     if(p.posDelta<=-8) bits.push(`<span style="color:var(--bad)">Spike-week data likes him ${-p.posDelta} spots less than consensus</span>`);
   } else bits.push('<span style="color:var(--warn)">No NFL history — consensus rank only</span>');
+  if(S.mode==='guillotine'){
+    if(p.fl >= 0.9) bits.push(`<span style="color:var(--go)">High weekly floor — ${p.gm} games, swing ${Math.round(p.cv*100)}% of average</span>`);
+    if(p.fl <= -0.9) bits.push(`<span style="color:var(--bad)">Low floor — ${p.gm} games, swing ${Math.round(p.cv*100)}% of average</span>`);
+    if(p.byeRisk >= 0.6) bits.push(`<span style="color:var(--warn)">Week ${p.bye} bye — early, and the early ones are the ones waivers cannot cover</span>`);
+  }
   if(p.inj) bits.push(`<span style="color:var(--bad)">${esc(p.inj)}${p.injBody?' · '+esc(p.injBody):''} — expected to miss time</span>`);
   if(S.taken[key]) bits.push(`<b style="color:var(--warn)">already ${S.taken[key]==='me'?'yours':'taken'}</b>`);
   $('#shSub').innerHTML = bits.join('<br>');
@@ -2136,6 +2354,16 @@ $('#cfgSwing').oninput = e=>{
   S.bbSwing = +e.target.value/100; $('#bbVal').textContent = e.target.value+'%';
   save(); buildPlayers(); render();
 };
+/* The three guillotine knobs all feed applyFormat, which runs inside
+   buildPlayers — the same full rebuild the boom slider does. Cheaper paths
+   exist and every one of them leaves some cached rank behind. */
+const swing = (sel, lbl, key)=>{ $(sel).oninput = e=>{
+  S[key] = +e.target.value/100; $(lbl).textContent = e.target.value+'%';
+  save(); buildPlayers(); render();
+}; };
+swing('#cfgFlSwing',  '#flVal', 'flSwing');
+swing('#cfgByeSwing', '#byVal', 'byeSwing');
+swing('#cfgQbBoost',  '#qbVal', 'qbBoost');
 
 
 /* ==================== HOSTED-ONLY CAPABILITIES ====================
@@ -2191,8 +2419,12 @@ if(S.awake){ $('#btnAwake').textContent='Let screen sleep'; keepAwake(true); } e
 $('#installHint').textContent = HOSTED
   ? 'Hosted: live Sleeper sync is available, and you can install this to your home screen from the browser menu so it opens full screen and works offline.'
   : 'Opened as a local file. Live Sleeper sync and home-screen install need this served over http(s).';
-$('#cfgSwing').value=Math.round((S.bbSwing==null?0.20:S.bbSwing)*100);
-$('#bbVal').textContent=Math.round((S.bbSwing==null?0.20:S.bbSwing)*100)+'%';
+const setSwing = (sel, lbl, v)=>{ const pct = Math.round(v*100);
+  $(sel).value = pct; $(lbl).textContent = pct+'%'; };
+setSwing('#cfgSwing',    '#bbVal', S.bbSwing==null  ? BB_SWING_DEFAULT  : S.bbSwing);
+setSwing('#cfgFlSwing',  '#flVal', S.flSwing==null  ? FL_SWING_DEFAULT  : S.flSwing);
+setSwing('#cfgByeSwing', '#byVal', S.byeSwing==null ? BYE_SWING_DEFAULT : S.byeSwing);
+setSwing('#cfgQbBoost',  '#qbVal', S.qbBoost==null  ? QB_BOOST_DEFAULT  : S.qbBoost);
 if(S.ecr&&S.ecr.length) $('#ecrPaste').value = S.ecr.map(r=>`${r.rank}. ${r.name}${r.team?' ('+r.team+(r.pos?' - '+r.pos:'')+')':''}`).join('\n');
 buildPlayers();
 render();
