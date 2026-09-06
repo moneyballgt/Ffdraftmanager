@@ -243,9 +243,19 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
 
   <!-- ============ SETUP ============ -->
   <section id="vSetup" hidden>
-    <div class="card">
+    <!-- Hidden unless /api/status answers, i.e. unless this page is being
+         served by the local Yahoo server. On GitHub Pages or off a file://
+         copy there is no server to talk to and no card here to explain that. -->
+    <div class="card" id="cardYahoo" hidden>
+      <div class="lbl">Yahoo auto-sync</div>
+      <div class="hint" id="yhState" style="margin:0 0 10px"></div>
+      <div id="yhBtns"></div>
+      <div id="yhLeagues" style="margin-top:9px"></div>
+      <div class="hint" id="yhMsg"></div>
+    </div>
+    <div class="card" id="cardSleeper">
       <div class="lbl">Sleeper auto-sync</div>
-      <div class="hint" style="margin:0 0 10px">Picks load themselves — you never type one. Enter your Sleeper username, or paste the draft URL.</div>
+      <div class="hint" id="slLead" style="margin:0 0 10px">Picks load themselves — you never type one. Enter your Sleeper username, or paste the draft URL.</div>
       <input id="sleeperUser" placeholder="Sleeper username" autocapitalize="off" autocorrect="off" spellcheck="false">
       <div class="row2" style="margin-top:8px">
         <button class="btn pri" id="btnFindLeagues">Find my draft</button>
@@ -259,6 +269,10 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
     <div class="card">
       <div class="lbl">League</div>
       <div class="hint" id="cfgMigrated" hidden style="margin:0 0 10px"></div>
+      <!-- Filled when a connected league overwrites the lineup below. Never a
+           silent change: on draft morning a roster that quietly stopped being
+           the one he set is indistinguishable from a broken app. -->
+      <div class="hint" id="cfgAdopted" hidden style="margin:0 0 10px"></div>
       <div class="row2">
         <div><div class="hint" style="margin:0 0 5px">Teams</div><input id="cfgTeams" type="number" inputmode="numeric" min="2" max="20"></div>
         <div><div class="hint" style="margin:0 0 5px" id="cfgSlotLbl">Your slot</div><input id="cfgSlot" type="number" inputmode="numeric" placeholder="e.g. 5"></div>
@@ -338,10 +352,10 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
     </div>
     <div class="card">
       <div class="lbl">Seed with consensus rankings</div>
-      <div class="hint" style="margin:0 0 9px">Paste any ranking list — FantasyPros consensus, Sleeper, anywhere. Almost any format works. This <b>replaces the built-in order</b> and adds players the app doesn't know about.
-      <br><b style="color:var(--warn)">It also replaces the format layer.</b> A pasted list is taken as the
-      final word on order, so the floor, bye and QB weighting above stop moving anyone. Leave this empty to
-      draft off the guillotine-weighted board.</div>
+      <div class="hint" style="margin:0 0 9px">Paste any ranking list — FantasyPros consensus, a guillotine
+      cheat sheet, anywhere. Almost any format works. This <b>replaces the built-in order</b> and adds players
+      the app doesn't know about. The format layer still runs on top of it: the pasted list is the consensus
+      the floor, bye and QB weighting are measured against, exactly as the built-in one is.</div>
       <textarea id="ecrPaste" rows="5" placeholder="1. Ja'Marr Chase (CIN - WR)&#10;2. Bijan Robinson (ATL - RB)&#10;3. Justin Jefferson (MIN - WR)&#10;..." style="width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px;color:var(--tx);font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none;resize:vertical"></textarea>
       <div class="row2" style="margin-top:8px">
         <button class="btn pri" id="btnLoadEcr">Load rankings</button>
@@ -357,7 +371,9 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
     </div>
     <div class="card">
       <div class="lbl">Player data</div>
-      <button class="btn" id="btnRefreshPlayers" style="width:100%">Refresh players from Sleeper</button>
+      <button class="btn" id="btnRefreshPlayers" style="width:100%">Refresh player data from Sleeper</button>
+      <div class="hint" style="margin-top:6px">Teams and injury designations, for whichever room you draft in.
+      Free, no login, and it never blocks a Yahoo sync — if it fails the built-in board carries on.</div>
       <div class="hint" id="dataMsg"></div>
     </div>
     <div class="card">
@@ -821,11 +837,24 @@ let S = {
   manual:[],         // hand-entered picks, preserved across sync rebuilds
   order:[],          // [{key,by,pick}] chronological
   draftId:null, userId:null, sleeperSlot:null,
+  /* Which room the picks are coming from. 'sleeper' reads Sleeper's public
+     API straight from the browser; 'yahoo' reads the local server, which is
+     the only way to reach Yahoo at all (no CORS, needs a client secret). */
+  src:'sleeper', yahooKey:null,
   synced:0
 };
 let P = [];          // player objects
 let byKey = {};
 let sleeperMeta = null;   // key -> {team,pos,rank,injury}
+let yahooMeta   = null;   // key -> {team,rank,adp,injury} from the local server
+/* What the local Yahoo server said about itself, if there is one at all.
+   `on` stays false on GitHub Pages and on file:// — /api/status 404s there —
+   and every Yahoo control in the UI is hidden off the back of it. */
+let SRV = {on:false, connected:false, mode:null, authUrl:'/auth',
+           rankSource:null, adpAvailable:false, building:''};
+/* The id of whatever draft is currently connected, whichever room it is in.
+   Used everywhere the header and the freshness line ask "are we live?". */
+const liveId = () => S.src==='yahoo' ? S.yahooKey : S.draftId;
 let pollTimer = null;
 let view = 'Pick';
 let posFilter = 'ALL';
@@ -918,11 +947,29 @@ function buildPlayers(){
   // because its ranking source is; another format needs different rankings
   // pasted in, not a slider.
 
-  // merge live Sleeper info
+  /* Merge live platform info. Sleeper is free, keyless and CORS-open, so it
+     is loaded whatever room he is drafting in — team and injury designation
+     are platform-neutral facts and worth having. Its search_rank is NOT: see
+     the market note below. Yahoo, when connected, wins on every field it
+     carries, because that is the league he is actually in. */
   if(sleeperMeta){
     P.forEach(p=>{
       const m = sleeperMeta[p.key];
       if(m){ if(m.team) p.team = m.team; p.mkt = m.rank; p.injury = m.injury; }
+    });
+  }
+  if(yahooMeta){
+    P.forEach(p=>{
+      const m = yahooMeta[p.key];
+      if(!m) { p.mkt = null; return; }   // not in the Yahoo pool: no market rank at all
+      if(m.team) p.team = m.team;
+      if(m.injury) p.injury = m.injury;
+      /* adp first, rank second. Both come from the Yahoo room; adp is an
+         average draft PICK, the same unit as the board's own ADP, so it is
+         the like-for-like number. rank is Yahoo's overall ordering — still
+         the right room, just a coarser signal — and is the fallback when
+         Yahoo published no draft analysis for that player. */
+      p.mkt = m.adp != null ? m.adp : m.rank;
     });
   }
   applyFormat();
@@ -934,6 +981,10 @@ function buildPlayers(){
   const overall = [...P].sort((a,b)=> (b.vorp+(BIAS[b.pos]||0)) - (a.vorp+(BIAS[a.pos]||0)));
   overall.forEach((p,i)=> p.myRank = i+1);
   // the built-in board now carries real consensus ranks, so those are the market
+  /* Dense-rank whatever market signal came back, so a Yahoo adp of 18.9 and a
+     Sleeper search_rank of 240 both land on one comparable 1..N scale. Ranking
+     the two sources TOGETHER would be meaningless — they are different units
+     from different rooms — which is why only one of them ever fills p.mkt. */
   const ranked = P.filter(p=>p.mkt).sort((a,b)=>a.mkt-b.mkt);
   const mktRank = {}; ranked.forEach((p,i)=> mktRank[p.key] = i+1);
   P.forEach(p=> p.adp = p.ecr || mktRank[p.key] || p.myRank);
@@ -941,9 +992,16 @@ function buildPlayers(){
      off. In a Sleeper league that is Sleeper's own stock ranking, not expert
      consensus — the two disagree often, and the gap is exactly where value
      hides: a player Sleeper ranks well above your board goes early, one it
-     ranks below comes back to you. */
-  P.forEach(p=> { p.sleeperRank = mktRank[p.key] || null;
-                  p.mktRank = p.sleeperRank || p.adp; });
+     ranks below comes back to you.
+
+     The same argument, unchanged, is why Sleeper's rank must NOT be the
+     market in a Yahoo draft: it describes how Sleeper users draft, and there
+     is not one of them in the room. When the server is connected, p.mkt is
+     Yahoo's own adp/O-Rank instead, and only players Yahoo has no number for
+     fall through to the built-in ECR (p.adp) — never to the other platform's
+     ranking, which would silently mix two markets on one board. */
+  P.forEach(p=> { p.roomRank = mktRank[p.key] || null;
+                  p.mktRank = p.roomRank || p.adp; });
   computeTiers();
   byKey = {}; P.forEach(p=> byKey[p.key]=p);
   if(S.ecr && S.ecr.length){
@@ -1299,11 +1357,39 @@ function applyEcr(list){
     const curve = curveFor(pos, ranked.length);
     ranked.forEach((p,i)=>{ p.proj = curve[i]; p.base = curve[i]; });
     // only a substantial list is treated as authoritative enough to
-    // push everyone it left out below everyone it included
+    // push everyone it left out below everyone it included.
+    // base as well as proj: applyFormat() below rebuilds proj by handing out
+    // the sorted BASE curve, so demoting proj alone would be undone one line
+    // later and the players the cheat sheet omitted would climb back on.
     if(full) P.filter(p=>p.pos===pos && !p.ecr).forEach(p=>{
-      p.proj = Math.min(p.proj, curve[curve.length-1] - 1);
+      p.proj = p.base = Math.min(p.base, curve[curve.length-1] - 1);
     });
   });
+  /* 3. re-run the whole valuation chain on the new order.
+     The pasted list sets the ORDER. It must not also switch off the format
+     layer — and calling computeVorp() straight from here did exactly that,
+     silently: the floor, bye and QB weighting (and best ball's boom shift
+     before them) had already been applied to the OLD curve inside
+     buildPlayers, and reassigning base/proj here threw all of it away. A
+     guillotine-specific cheat sheet — the most likely thing to be pasted —
+     would have turned off the guillotine mode it was pasted for.
+
+     Order matters and every step depends on the one above it:
+       ecrPosRank  the pasted order, per position — the x-axis of both
+                   regressions below and the input to applyFormat's shift
+       boom/floor  residuals are regressed ON ecrPosRank, so a new order
+                   means new residuals; reusing the old ones would grade
+                   players against a ranking that no longer exists
+       applyFormat re-sorts the position by rank + format shift and hands the
+                   curve back out, so this is where the weighting re-enters
+       computeVorp reads proj, so it has to come last */
+  POS.forEach(pos=>{
+    P.filter(p=>p.pos===pos).sort((a,b)=>(a.ecr||9999)-(b.ecr||9999))
+     .forEach((p,i)=> p.ecrPosRank = i+1);
+  });
+  computeBoom();
+  computeFloor();
+  applyFormat();
   computeVorp();
   // consensus order IS the market, so it drives pick-timing too
   const all = P.filter(p=>p.ecr).sort((a,b)=>a.ecr-b.ecr);
@@ -1312,6 +1398,12 @@ function applyEcr(list){
   computeTiers();
   return {matched, added, skipped, full};
 }
+
+/* Which room the market numbers came from — said out loud wherever one is
+   printed, because "SL 12" and "YH 12" mean different things and a number
+   with no source is worse than no number. */
+function mktName(){ return yahooMeta ? 'Yahoo' : 'Sleeper'; }
+function mktTag(){  return yahooMeta ? 'YH' : 'SL'; }
 
 /* ============================ DRAFT MATH ============================ */
 const totalPicks = () => S.teams * S.rounds;
@@ -1695,16 +1787,16 @@ function reasonFor(e){
   if(e.cliff) bits.push(`<b>tier cliff</b> — only ${e.tierLeft} left in ${p.pos} Tier ${p.tier}`);
   if(nxt && e.surv < 0.35) bits.push(`<b>won't last</b> — ${Math.round(e.surv*100)}% he's there at ${fmtPick(nxt)}`);
   // the gap between your board and the room's board is the whole edge
-  if(p.sleeperRank && p.adp){
-    const g = p.sleeperRank - p.adp;
+  if(p.roomRank && p.adp){
+    const g = p.roomRank - p.adp, M = mktName();
     // only call it a slide if he actually survives — otherwise the note
     // contradicts the survival line directly above it
     if(g >= 12 && e.surv >= 0.5)
-      bits.push(`Sleeper has him <b>${g} spots lower</b> than consensus — he may slide back to you`);
+      bits.push(`${M} has him <b>${g} spots lower</b> than consensus — he may slide back to you`);
     else if(g >= 12)
-      bits.push(`Sleeper has him at #${p.sleeperRank}, below his consensus rank`);
+      bits.push(`${M} has him at #${p.roomRank}, below his consensus rank`);
     else if(g <= -12)
-      bits.push(`Sleeper has him <b>${-g} spots higher</b> than consensus — he goes early in this room`);
+      bits.push(`${M} has him <b>${-g} spots higher</b> than consensus — he goes early in this room`);
   }
   if(S.mode==='bestball' && p.boomBlend!=null && p.boomBlend>=45)
     bits.push(`booms <b>${Math.round(p.boomBlend)}%</b> of weeks (${p.ceil} pt ceiling)`);
@@ -1750,8 +1842,9 @@ function take(key, by){
   const rec = {key, by, pick: pickNo(), slot: slotOnClock(pickNo())};
   S.taken[key] = by;
   S.order.push(rec);
-  // Sleeper is rebuilt from scratch every poll, so a hand-entered pick has to
-  // be remembered separately or it silently vanishes within four seconds.
+  // A synced board is rebuilt from scratch every poll (see applyPicks), so a
+  // hand-entered pick has to be remembered separately or it silently vanishes
+  // within four seconds. True of Yahoo and Sleeper alike.
   if(pollTimer) (S.manual = S.manual||[]).push(rec);
   save(); render();
 }
@@ -1760,7 +1853,7 @@ function undo(){
     // synced picks come straight back on the next poll; only manual ones
     // can actually be taken back
     const m = (S.manual||[]).pop();
-    if(!m){ alert('Picks are coming from Sleeper — undo it there. Only picks you entered by hand can be undone here.'); return; }
+    if(!m){ alert(`Picks are coming from ${S.src==='yahoo'?'Yahoo':'Sleeper'} — undo it there. Only picks you entered by hand can be undone here.`); return; }
     delete S.taken[m.key];
     S.order = S.order.filter(o=>o.key!==m.key);
   } else {
@@ -1838,16 +1931,23 @@ async function findLeagues(){
 
 /* Sleeper's league object carries the actual starting lineup. Taking it is
    the difference between the app being right for his league and being right
-   for the league he remembered to type in. Deliberately authoritative: it
-   overwrites a hand-set roster, because Sleeper is the league.
+   for the league he remembered to type in. So it is still authoritative — it
+   overwrites a hand-set roster, because Sleeper is the league — but it is no
+   longer SILENT about it. A carefully-set 9-team guillotine lineup that has
+   quietly become somebody else's on draft morning is indistinguishable from a
+   broken app, and the fix (S.rosterKeep) has to be his, not a coin flip in
+   here: refusing to adopt by default would be just as silent in the other
+   direction, and would leave him drafting off the wrong replacement level.
    Only tokens we understand are counted, and the result is ignored unless it
    looks like a real lineup — a half-parsed roster is worse than none. */
+const rosterLabel = (r, bench) => SLOT_ORDER.filter(k=>r[k]>0).map(k=>k+r[k]).join(' · ')
+                                 + ' · ' + bench + ' bench';
 const SLEEPER_SLOT = {QB:'QB', RB:'RB', WR:'WR', TE:'TE',
   FLEX:'FLEX', WRRB_FLEX:'FLEX', REC_FLEX:'FLEX', WRT:'FLEX', WRRB_WRT:'FLEX',
   SUPER_FLEX:'QB',   // in practice a second quarterback, and the flex model
                      // here only knows RB/WR/TE — call it what it plays as
   K:'K', DEF:'DEF', DST:'DEF'};
-function adoptRosterPositions(list){
+function adoptRosterPositions(list, src){
   if(!Array.isArray(list) || !list.length) return;
   const r = {QB:0, RB:0, WR:0, TE:0, FLEX:0, K:0, DEF:0};
   let bench = 0, unknown = 0;
@@ -1860,23 +1960,47 @@ function adoptRosterPositions(list){
   });
   if(!r.QB && !r.RB && !r.WR) return;         // not a lineup we understand
   if(unknown > 2) return;                     // IDP or some format we do not model
+  const from = {roster:Object.assign({}, S.roster), bench:S.bench};
+  if(rosterLabel(r, bench) === rosterLabel(from.roster, from.bench)) return;   // nothing changed
+  if(S.rosterKeep) return;                    // he already said "keep mine" once
+  S.rosterAdopt = {src:src || 'Your league', from, to:{roster:Object.assign({}, r), bench}};
   S.roster = r; S.bench = bench;
+}
+
+/* The one place that says, in the Setup tab, what a connected league changed
+   out from under him — and offers it back. Rendered from state on every
+   render, so a poll or a reload can never leave a stale claim on screen. */
+function renderAdopted(){
+  const bits = [];
+  const ra = S.rosterAdopt, sa = S.slotAdopt;
+  if(ra) bits.push(`<span style="color:var(--warn)">${esc(ra.src)} set your starting lineup</span> to
+    <b>${esc(rosterLabel(ra.to.roster, ra.to.bench))}</b>. You had
+    <b>${esc(rosterLabel(ra.from.roster, ra.from.bench))}</b> — and that changes replacement level, so it
+    changes every value on the board.
+    <button class="lnk" id="btnRosKeep">Keep mine instead</button> ·
+    <button class="lnk" id="btnRosOk">Use theirs</button>`);
+  if(sa) bits.push(`<span style="color:var(--warn)">${esc(sa.src)} says you are slot ${sa.to}</span>,
+    not ${sa.from}. Every timing number comes off this.
+    <button class="lnk" id="btnSlotKeep">Keep ${sa.from}</button> ·
+    <button class="lnk" id="btnSlotOk">Use ${sa.to}</button>`);
+  const el = $('#cfgAdopted'); if(el) el.hidden = !bits.length;
+  setSetupHTML('#cfgAdopted', bits.join('<br><br>'));
 }
 
 async function connectDraft(id){
   id = String(id).trim().replace(/\/+$/,'').split('/').pop().split('?')[0];
-  S.draftId = id; save();
+  S.src = 'sleeper'; S.draftId = id; save();
   $('#syncMsg').textContent = 'Connecting to draft '+id+'…';
   try{
     const d = await j('draft/'+id);
     S.teams  = d.settings.teams  || S.teams;
     // Sleeper knows the real round count; stop deriving it from here on.
     if(d.settings.rounds){ S.rounds = d.settings.rounds; S.roundsAuto = false; }
-    if(d.draft_order && S.userId && d.draft_order[S.userId]) S.slot = d.draft_order[S.userId];
+    if(d.draft_order && S.userId) adoptSlot(d.draft_order[S.userId], 'Sleeper');
     if(d.league_id){
       try{
         const lg = await j('league/'+d.league_id);
-        adoptRosterPositions(lg.roster_positions);
+        adoptRosterPositions(lg.roster_positions, 'Sleeper');
         const rec = lg.scoring_settings && lg.scoring_settings.rec;
         if(rec!=null){
           S.scoring = rec;
@@ -1891,31 +2015,298 @@ async function connectDraft(id){
   }catch(e){ $('#syncMsg').textContent = 'Could not connect to that draft ID.'; }
 }
 
+/* THE POLL CONTRACT — both platforms go through here, and it is the one
+   thing in this file most easily broken by accident.
+
+   S.taken and S.order are rebuilt FROM SCRATCH on every poll, from the
+   platform's list, and the hand-entered picks in S.manual are then re-applied
+   on top. Rebuilding is deliberate: it is the only way a pick that the
+   platform later corrected or removed ever leaves the board. But it also
+   means a hand-entered pick lives nowhere else, so dropping the re-apply
+   below deletes his manual picks within four seconds of him making them.
+
+   Take a normalised [{key, pick, slot}] list, whichever room it came from. */
+function applyPicks(rows){
+  S.order = []; S.taken = {};
+  rows.slice().sort((a,b)=>a.pick-b.pick).forEach(r=>{
+    /* Ownership comes off the platform's OWN draft slot, not off
+       slotOnClock(pick) — the two agree in a snake and disagree in a linear
+       or auction draft, and where they disagree the platform is right. It
+       also keeps `by` and `slot` on the same record consistent, which the
+       room model reads as a pair. Yahoo and Sleeper both send draft_slot;
+       slotOnClock is only the fallback for a row that arrives without one. */
+    const mine = S.slot && r.slot===S.slot;
+    S.order.push({key:r.key, by: mine?'me':'them', pick:r.pick, slot:r.slot});
+    S.taken[r.key] = mine?'me':'them';
+  });
+  // re-apply anything entered by hand that the platform does not know about
+  (S.manual||[]).forEach(m=>{
+    if(!S.taken[m.key]){ S.taken[m.key]=m.by; S.order.push(m); }
+  });
+  S.order.sort((a,b)=>a.pick-b.pick);
+  S.unmatched = S.order.filter(o=>!byKey[o.key]).length;
+  S.synced = Date.now(); save(); render();
+}
+
 async function pullPicks(){
-  if(!S.draftId) return;
+  if(!liveId()) return;
   try{
-    const picks = await j('draft/'+S.draftId+'/picks');
-    S.order = []; S.taken = {};
-    picks.sort((a,b)=>a.pick_no-b.pick_no).forEach(pk=>{
-      const md = pk.metadata||{};
-      const pos = md.position==='DEF'?'DEF':md.position;
-      const nm  = pos==='DEF' ? (md.team||md.first_name||'') : `${md.first_name||''} ${md.last_name||''}`;
-      const key = pos==='DEF' ? 'def_'+(md.team||pk.player_id) : norm(nm)+'_'+pos;
-      const mine = S.slot && slotOnClock(pk.pick_no)===S.slot;
-      S.order.push({key, by: mine?'me':'them', pick: pk.pick_no, slot: pk.draft_slot || slotOnClock(pk.pick_no)});
-      S.taken[key] = mine?'me':'them';
-    });
-    // re-apply anything entered by hand that Sleeper does not know about
-    (S.manual||[]).forEach(m=>{
-      if(!S.taken[m.key]){ S.taken[m.key]=m.by; S.order.push(m); }
-    });
-    S.order.sort((a,b)=>a.pick-b.pick);
-    S.unmatched = S.order.filter(o=>!byKey[o.key]).length;
-    S.synced = Date.now(); save(); render();
+    const rows = S.src==='yahoo' ? await yahooPickRows() : await sleeperPickRows();
+    applyPicks(rows);
+    if(S.src==='yahoo') yahooSlotWatch();
   }catch(e){ /* keep last known state */ }
 }
+
+async function sleeperPickRows(){
+  const picks = await j('draft/'+S.draftId+'/picks');
+  return picks.map(pk=>{
+    const md = pk.metadata||{};
+    const pos = md.position==='DEF'?'DEF':md.position;
+    const nm  = pos==='DEF' ? (md.team||md.first_name||'') : `${md.first_name||''} ${md.last_name||''}`;
+    return {key: pos==='DEF' ? 'def_'+(md.team||pk.player_id) : norm(nm)+'_'+pos,
+            pick: pk.pick_no, slot: pk.draft_slot || slotOnClock(pk.pick_no)};
+  });
+}
+
 function startPoll(){ stopPoll(); pullPicks(); pollTimer=setInterval(pullPicks,4000); render(); }
 function stopPoll(){ if(pollTimer) clearInterval(pollTimer); pollTimer=null; render(); }
+
+
+/* ============================ YAHOO SYNC ============================
+   Yahoo's API sends no CORS headers and needs a client secret, so the browser
+   can never call it. It calls the little Node server in server/ instead, which
+   serves this very page — so the API is same-origin and needs no key here.
+
+   Which means the presence of that server is DETECTABLE, and is detected
+   rather than asked about: /api/status answers on localhost:8000 and 404s on
+   GitHub Pages or a file:// copy. Nothing below is offered unless it answered.
+
+   The server computes its board keys with a verbatim copy of norm(), so its
+   player map and its picks join straight onto P with no name matching here. */
+const SRV_API = 'api/';   // relative, so it works under a sub-path too
+
+async function srv(path){
+  const r = await fetch(SRV_API + path, {cache:'no-store'});
+  if(r.status === 401){            // signed out: the server is there, Yahoo isn't
+    SRV.on = true; SRV.connected = false;
+    try{ const b = await r.json(); if(b && b.auth_url) SRV.authUrl = b.auth_url; }catch(e){}
+    renderYahoo();
+    throw new Error('not_connected');
+  }
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+/* Cheap pre-question, asked before the real one.
+
+   Asking /api/status straight out is the honest probe, but its 404 answer is
+   not free: on GitHub Pages, or off a static copy of this folder, it puts a
+   red line in his console and in the network tab on every single load — which
+   is precisely the "something is broken" this whole path is meant to avoid.
+
+   So ask something that cannot 404 first, of a file every copy of the app
+   has and the browser has usually already fetched for the PWA. Our server
+   marks everything it serves no-cache — it has to, because a cached pick list
+   is the one bug that actually loses a draft — and a static host does not.
+
+   This is a HINT, never the answer: it only decides whether /api/status is
+   worth asking, and /api/status is what decides. And it is skipped entirely
+   for someone who has connected to Yahoo before, so a header change on the
+   server side can never strand him mid-draft behind a fingerprint. */
+async function serverLikely(){
+  if(S.yahooKey) return true;
+  try{
+    const r = await fetch('manifest.webmanifest');
+    return r.ok && /no-cache|no-store/i.test(r.headers.get('cache-control') || '');
+  }catch(e){ return false; }
+}
+
+/* Is there a server? Deliberately quiet about every failure: a 404, an HTML
+   error page, a dead port and a file:// origin all mean the same thing —
+   there is no Yahoo here — and none of them is a fault worth showing him. */
+async function probeServer(){
+  if(!HOSTED) return false;
+  if(!await serverLikely()) return false;
+  try{
+    const r = await fetch(SRV_API + 'status', {cache:'no-store'});
+    if(r.status === 401){
+      SRV.on = true; SRV.connected = false;
+      const b = await r.json().catch(()=>null);
+      if(b && b.auth_url) SRV.authUrl = b.auth_url;
+    } else if(r.ok){
+      const b = await r.json();
+      // a static host that serves index.html for everything answers 200 with
+      // HTML; json() throws on that and we land in the catch. This second
+      // check covers the rarer case of some other server's valid JSON.
+      if(!b || typeof b.mode !== 'string') return false;
+      SRV.on = true;
+      SRV.connected   = !!b.connected;
+      SRV.mode        = b.mode;
+      SRV.authUrl     = b.auth_url || '/auth';
+      SRV.rankSource  = b.rank_source || null;
+      SRV.adpAvailable= !!b.adp_available;
+      SRV.building    = b.players && b.players.building ? (b.players.message || 'building the player list…') : '';
+    } else return false;
+  }catch(e){ return false; }
+  renderYahoo();
+  return true;
+}
+
+/* Paint the Yahoo card from SRV + S. Called by renderSetup on every render, so
+   it must be idempotent and must never touch #yhLeagues (the league buttons
+   live there and a repaint mid-tap would destroy the one he is pressing). */
+function renderYahoo(){
+  const card = $('#cardYahoo'); if(!card) return;
+  card.hidden = !SRV.on;
+  setSetupHTML('#slLead', SRV.on
+    ? `You are drafting on <b>Yahoo</b> — use the card above. This one is only for a Sleeper draft.`
+    : `Picks load themselves — you never type one. Enter your Sleeper username, or paste the draft URL.`);
+  if(!SRV.on) return;
+  const mock = SRV.mode === 'mock';
+  let state, btns;
+  if(!SRV.connected){
+    state = `The local server is running but is not signed in to Yahoo yet.`;
+    // same-origin paths only. The URL arrives as JSON from a server we trust,
+    // but it lands in an href, and "trusted enough to render as markup" is a
+    // different claim from "trusted enough to talk to".
+    const auth = /^\/[\w\-./]*$/.test(SRV.authUrl) ? SRV.authUrl : '/auth';
+    btns  = `<a class="btn pri" href="${auth}" style="display:block;text-align:center;text-decoration:none">Connect Yahoo</a>`;
+  } else if(S.src === 'yahoo' && S.yahooKey && pollTimer){
+    state = `${mock ? '<b style="color:var(--warn)">MOCK DRAFT</b> — fake picks, not your league. ' : ''}`
+          + `Live from Yahoo · ${S.teams} teams · ${S.rounds} rounds${S.slot?` · you are slot ${S.slot}`:' · slot not published yet'}.`;
+    btns  = `<button class="btn" id="btnYhStop" style="width:100%">Stop sync</button>`;
+  } else {
+    state = `${mock ? '<b style="color:var(--warn)">MOCK MODE</b> — the server is serving a fake draft. ' : ''}`
+          + `Signed in to Yahoo. Pick the league you're drafting and picks load themselves.`;
+    btns  = `<button class="btn pri" id="btnYhLeagues" style="width:100%">Find my draft</button>`;
+  }
+  if(SRV.building) state += ` <span style="color:var(--te)">${esc(SRV.building)}</span>`;
+  /* The server tells us which ranking it actually got. If Yahoo refused the
+     explicit sort=OR and it fell back to the default listing order, the number
+     is an ordering rather than Yahoo's published rank — worth one line, because
+     every market comparison in the app is computed off it. */
+  if(SRV.connected && SRV.rankSource && SRV.rankSource !== 'yahoo_overall_rank')
+    state += ` <span style="color:var(--te)">Yahoo would not sort by overall rank, so its ranks are an
+      ordering only${SRV.adpAvailable ? ' — Yahoo ADP is still exact' : ' and no ADP came back'}.</span>`;
+  setSetupHTML('#yhState', state);
+  setSetupHTML('#yhBtns', btns);
+}
+
+async function findYahooLeagues(){
+  const msg = $('#yhMsg'), box = $('#yhLeagues');
+  msg.textContent = 'Asking Yahoo for your leagues…'; box.innerHTML = '';
+  try{
+    const lgs = await srv('leagues');
+    if(!lgs.length){ msg.textContent = 'Yahoo returned no NFL leagues for this season on that account.'; return; }
+    msg.textContent = `Found ${lgs.length} league(s) — tap the one you're drafting.`;
+    lgs.forEach(lg=>{
+      const b = document.createElement('button');
+      b.className = 'btn'; b.style.cssText = 'width:100%;margin-top:6px;text-align:left';
+      b.innerHTML = `<b>${esc(lg.name || lg.league_id)}</b><br><span style="font-size:11.5px;color:var(--dim)">`
+                  + `${lg.total_rosters||'?'} teams · ${esc(lg.league_id)}</span>`;
+      // league_id IS the full Yahoo league key (461.l.123456) and round-trips
+      // straight back into every other endpoint — do not split the number out.
+      b.onclick = ()=>{ box.innerHTML = ''; connectYahoo(lg.league_id); };
+      box.appendChild(b);
+    });
+  }catch(e){
+    msg.textContent = e.message === 'not_connected'
+      ? 'Not signed in to Yahoo yet — tap Connect Yahoo above.'
+      : 'The server could not read your leagues (' + e.message + ').';
+  }
+}
+
+async function connectYahoo(key){
+  const msg = $('#yhMsg');
+  S.src = 'yahoo'; S.yahooKey = key;
+  // a fresh connect asks the draft-order question again: this may be a
+  // different league, and "we already saw a slot" was about the old one
+  delete S.slotSeen; save();
+  msg.textContent = 'Connecting…';
+  try{
+    const d = await srv('draft/' + encodeURIComponent(key));
+    if(d.teams)  S.teams = d.teams;
+    if(d.rounds){ S.rounds = d.rounds; S.roundsAuto = false; }
+    adoptSlot(d.slot, 'Yahoo');
+    if(d.scoring != null){
+      S.scoring = d.scoring;
+      S.scoringWarn = Math.abs(d.scoring - 1) > 0.01
+        ? `This league scores ${d.scoring} per reception, but the board is built on full-PPR consensus. Paste rankings for your scoring to correct it.` : '';
+    }
+    shape(); save(); buildPlayers();
+    msg.innerHTML = `Connected · ${S.teams} teams · ${S.rounds} rounds`
+      + (S.slot ? ` · you are slot ${S.slot}` : ` · <b>Yahoo has not published the draft order yet</b> — set your slot below and it will be adopted the moment Yahoo does`)
+      + ` · picks will load automatically.`;
+    startPoll();
+    /* Not awaited. Building the Yahoo player map is ~25 sequential calls the
+       first time (the server warms it in the background off the /draft call
+       above), and the picks must start flowing NOW rather than after it. When
+       it lands the board is rebuilt around it; if it never lands, the market
+       falls back to the built-in ECR and everything else still works. */
+    loadYahooPlayers(key);
+  }catch(e){
+    if(e.message === 'not_connected'){ msg.textContent = 'Not signed in to Yahoo yet — tap Connect Yahoo above.'; return; }
+    msg.textContent = 'Could not read that league from the server (' + e.message + ').';
+    renderYahoo();
+  }
+}
+
+async function loadYahooPlayers(key){
+  try{
+    const m = await srv('players/' + encodeURIComponent(key));
+    const n = m && typeof m === 'object' ? Object.keys(m).length : 0;
+    if(!n) throw new Error('empty player map');
+    yahooMeta = m;
+    buildPlayers(); render();
+    const withAdp = Object.keys(m).filter(k=>m[k].adp != null).length;
+    const el = $('#yhMsg');
+    if(el) el.innerHTML = el.innerHTML + `<br>Market ranks from Yahoo: ${n} players, `
+      + (withAdp ? `${withAdp} with a Yahoo ADP.` : `overall rank only (no ADP published).`);
+  }catch(e){
+    const el = $('#yhMsg');
+    if(el) el.innerHTML = el.innerHTML + `<br><span style="color:var(--te)">No Yahoo market ranks yet (${esc(e.message)}) — using the built-in board. Picks still sync.</span>`;
+  }
+}
+
+async function yahooPickRows(){
+  const picks = await srv('picks/' + encodeURIComponent(S.yahooKey));
+  return picks.map(pk=>({
+    key : pk.position === 'DEF' ? 'def_' + (pk.team || pk.player_id)
+                                : norm(pk.name || '') + '_' + pk.position,
+    pick: pk.pick_no,
+    slot: pk.draft_slot || slotOnClock(pk.pick_no)
+  }));
+}
+
+/* Yahoo publishes no draft order until round 1 is under way, so the slot the
+   /draft call returned at connect time was probably null. Ask again, but not
+   on every 4s poll — once the real number is in there is nothing left to ask. */
+let _slotPolls = 0;
+function yahooSlotWatch(){
+  if(S.slotSeen || S.slotKeep) return;
+  if(++_slotPolls % 5) return;                       // ~every 20s
+  srv('draft/' + encodeURIComponent(S.yahooKey))
+    .then(d=>{ if(adoptSlot(d.slot, 'Yahoo')) render(); })
+    .catch(()=>{});
+}
+
+/* ADOPTING A SLOT FROM THE PLATFORM.
+   Two failure modes, both silent, both bad on draft morning:
+     - writing Yahoo's pre-draft null over a slot he typed in Setup blanks the
+       one setting every timing number in the app is computed from;
+     - taking a different number without saying so leaves him reading advice
+       for somebody else's seat.
+   So: nothing but a real in-range number is ever adopted, and a change to a
+   slot he had already set is announced in Setup with an undo. */
+function adoptSlot(slot, src){
+  const v = +slot;
+  if(!(v >= 1 && v <= S.teams)) return false;
+  S.slotSeen = true;
+  if(S.slot === v || S.slotKeep) return false;
+  if(S.slot != null) S.slotAdopt = {src, from:S.slot, to:v};
+  S.slot = v; save();
+  return true;
+}
 
 /* ============================ RENDER ============================ */
 function esc(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
@@ -1928,7 +2319,7 @@ function playerRow(p, extra){
     <span class="pos ${p.pos}">${p.pos}</span>
     <span class="pmid">
       <span class="pn">${esc(p.name)}${(p.injury||p.inj)?` <span class="inj">${esc(p.injury||p.inj)}</span>`:''}</span>
-      <span class="pm">${p.team} · ${p.pos}${p.posRank} · Tier ${p.tier} · ADP ${p.adp}${p.sleeperRank&&Math.abs(p.sleeperRank-p.adp)>=10?' \u00b7 SL '+p.sleeperRank:''}${p.bye?' · B'+p.bye:''}${p.posDelta>=8?` · <b style="color:var(--go)">▲${p.posDelta}</b>`:p.posDelta<=-8?` · <b style="color:var(--bad)">▼${-p.posDelta}</b>`:''}${st?` · ${st==='me'?'YOURS':'taken'}`:''}</span>
+      <span class="pm">${p.team} · ${p.pos}${p.posRank} · Tier ${p.tier} · ADP ${p.adp}${p.roomRank&&Math.abs(p.roomRank-p.adp)>=10?' \u00b7 '+mktTag()+' '+p.roomRank:''}${p.bye?' · B'+p.bye:''}${p.posDelta>=8?` · <b style="color:var(--go)">▲${p.posDelta}</b>`:p.posDelta<=-8?` · <b style="color:var(--bad)">▼${-p.posDelta}</b>`:''}${st?` · ${st==='me'?'YOURS':'taken'}`:''}</span>
     </span>
     <span class="pr">
       <span class="pv ${p.vorp<0?'neg':''}">${v}</span>
@@ -1946,7 +2337,7 @@ function renderHeader(){
   const sy = syncState(), sl = $('#hSync');
   $('#hDot').className = 'dot' + (sy.cls==='ok' ? ' live' : sy.cls==='bad' ? ' bad' : '');
   if(sl){ sl.textContent = sy.txt; sl.className = 'syncline ' + sy.cls;
-          sl.style.display = S.draftId ? 'block' : 'none'; }
+          sl.style.display = liveId() ? 'block' : 'none'; }
 
   const c = $('#hClock');
   if(!S.slot){ c.className='clock wait'; c.textContent='Set your draft slot in Setup →'; return; }
@@ -1991,7 +2382,7 @@ function renderPick(){
         <div style="font-size:16px;font-weight:700">${esc(wait.p.name)}
           <span style="color:var(--dim);font-weight:400;font-size:13px">${wait.p.pos} · ${wait.p.vorp>0?'+':''}${wait.p.vorp}</span></div>
         <div style="font-size:12.5px;color:var(--dim);margin-top:4px;line-height:1.5">
-          <b style="color:#9fd0ec">${Math.round(wait.surv*100)}%</b> he's still there at ${fmtPick(nx)}${wait.p.sleeperRank?` — Sleeper ranks him #${wait.p.sleeperRank}`:''}.
+          <b style="color:#9fd0ec">${Math.round(wait.surv*100)}%</b> he's still there at ${fmtPick(nx)}${wait.p.roomRank?` — ${mktName()} ranks him #${wait.p.roomRank}`:''}.
           Take ${esc(lastName)} now.</div>
       </div>` : '';
   // Show survival, not value over replacement: the card ranks by pick score,
@@ -2132,23 +2523,27 @@ function renderRoom(){
    render() is its only caller, so there is exactly one place the League card
    is repainted no matter what changed the league. */
 let _setupHTML = {};
+/* Only write innerHTML when it actually changed, against our own cache
+   rather than el.innerHTML (the browser normalises what it hands back, so
+   that comparison never matches and rewrites every time).
+
+   This is not a speed tweak. Pressing a stepper BLURS whichever number box
+   he typed in last, the blur fires the input's native change, that change
+   re-renders, and the button he is pressing is destroyed between mousedown
+   and mouseup — so no click event is ever produced and his first tap does
+   nothing. Leaving unchanged nodes alone keeps the tap alive. It keeps the
+   Yahoo card's buttons alive through a 4s poll for exactly the same reason. */
+const setSetupHTML = (sel,html)=>{ if(_setupHTML[sel]===html) return;
+                                   _setupHTML[sel]=html; const el=$(sel); if(el) el.innerHTML=html; };
 function renderSetup(){
   const r = S.roster, derived = SLOTS.length + S.bench;
   // A Sleeper poll re-renders every 4s. Writing .value into the box he is
   // typing in would eat the digit he just pressed, so leave the focused
   // field alone and let its own onchange be the source of truth.
   const setVal = (sel,v)=>{ const el=$(sel); if(el && el!==document.activeElement) el.value=v; };
-  /* Only write innerHTML when it actually changed, against our own cache
-     rather than el.innerHTML (the browser normalises what it hands back, so
-     that comparison never matches and rewrites every time).
-
-     This is not a speed tweak. Pressing a stepper BLURS whichever number box
-     he typed in last, the blur fires the input's native change, that change
-     re-renders, and the button he is pressing is destroyed between mousedown
-     and mouseup — so no click event is ever produced and his first tap does
-     nothing. Leaving unchanged nodes alone keeps the tap alive. */
-  const setHTML = (sel,html)=>{ if(_setupHTML[sel]===html) return;
-                                _setupHTML[sel]=html; const el=$(sel); if(el) el.innerHTML=html; };
+  const setHTML = setSetupHTML;
+  renderYahoo();
+  renderAdopted();
   setHTML('#rosterEditor', SLOT_ORDER.map(pos=>
     `<div class="rosrow ${r[pos]?'':'off'}">
        <span class="pos ${pos}">${pos}</span>
@@ -2273,6 +2668,17 @@ document.addEventListener('click', e=>{
   if(stp){ bumpRoster(stp.dataset.ros, +stp.dataset.d); return; }
   if(e.target.id === 'btnRoundsAuto'){ S.roundsAuto = true; applyShape(); return; }
   if(e.target.id === 'btnMigOk'){ delete S.migrated; save(); renderSetup(); return; }
+  if(e.target.id === 'btnYhLeagues'){ findYahooLeagues(); return; }
+  if(e.target.id === 'btnYhStop'){ stopPoll(); $('#yhMsg').textContent='Sync stopped — you are in manual mode.'; renderYahoo(); return; }
+  /* Adoption undo. rosterKeep/slotKeep are sticky: a reconnect on the next
+     reload would otherwise take the league's answer straight back again and
+     his "keep mine" would last exactly one page load. */
+  if(e.target.id === 'btnRosKeep'){ const a=S.rosterAdopt; S.rosterKeep=true; delete S.rosterAdopt;
+    if(a){ S.roster=a.from.roster; S.bench=a.from.bench; } applyShape(); return; }
+  if(e.target.id === 'btnRosOk'){ delete S.rosterAdopt; save(); renderSetup(); return; }
+  if(e.target.id === 'btnSlotKeep'){ const a=S.slotAdopt; S.slotKeep=true; delete S.slotAdopt;
+    if(a) S.slot=a.from; save(); render(); return; }
+  if(e.target.id === 'btnSlotOk'){ delete S.slotAdopt; save(); renderSetup(); return; }
   const chip = e.target.closest('.chip');
   if(chip){ posFilter = chip.dataset.p; renderBoard(); return; }
   const row = e.target.closest('.prow,.alt');
@@ -2386,16 +2792,19 @@ document.addEventListener('visibilitychange', ()=>{
 
 /* Is what you are looking at actually current? */
 function syncState(){
-  if(!S.draftId) return {txt:'not connected', cls:''};
+  if(!liveId()) return {txt:'not connected', cls:''};
   if(!pollTimer)  return {txt:'sync stopped', cls:'stale'};
   if(!S.synced)   return {txt:'connecting…', cls:''};
   const age = Math.round((Date.now()-S.synced)/1000);
-  if(!navigator.onLine) return {txt:'offline — picks are frozen', cls:'bad'};
+  // A Yahoo sync runs over localhost, so navigator.onLine says nothing about
+  // whether the SERVER can still reach Yahoo — the age of the last successful
+  // poll does, and it is what the two lines below are already measuring.
+  if(!navigator.onLine && S.src!=='yahoo') return {txt:'offline — picks are frozen', cls:'bad'};
   if(age > 25) return {txt:`last update ${age}s ago — may be behind`, cls:'bad'};
   if(age > 12) return {txt:`last update ${age}s ago`, cls:'stale'};
   return {txt:`live · updated ${age}s ago`, cls:'ok'};
 }
-setInterval(()=>{ if(S.draftId) renderHeader(); }, 3000);
+setInterval(()=>{ if(liveId()) renderHeader(); }, 3000);
 window.addEventListener('online',  ()=>renderHeader());
 window.addEventListener('offline', ()=>renderHeader());
 
@@ -2407,8 +2816,8 @@ $('#cfgRepl').value=S.repl||'A';
 $('#cfgReach').value=S.reach||'qbte';
 if(S.awake){ $('#btnAwake').textContent='Let screen sleep'; keepAwake(true); } else keepAwake(false);
 $('#installHint').textContent = HOSTED
-  ? 'Hosted: live Sleeper sync is available, and you can install this to your home screen from the browser menu so it opens full screen and works offline.'
-  : 'Opened as a local file. Live Sleeper sync and home-screen install need this served over http(s).';
+  ? 'Hosted: live draft sync is available, and you can install this to your home screen from the browser menu so it opens full screen and works offline.'
+  : 'Opened as a local file. Live draft sync and home-screen install need this served over http(s).';
 const setSwing = (sel, lbl, v)=>{ const pct = Math.round(v*100);
   $(sel).value = pct; $(lbl).textContent = pct+'%'; };
 setSwing('#cfgSwing',    '#bbVal', S.bbSwing==null  ? BB_SWING_DEFAULT  : S.bbSwing);
@@ -2418,6 +2827,24 @@ setSwing('#cfgQbBoost',  '#qbVal', S.qbBoost==null  ? QB_BOOST_DEFAULT  : S.qbBo
 if(S.ecr&&S.ecr.length) $('#ecrPaste').value = S.ecr.map(r=>`${r.rank}. ${r.name}${r.team?' ('+r.team+(r.pos?' - '+r.pos:'')+')':''}`).join('\n');
 buildPlayers();
 render();
+/* Sleeper first and unconditionally: it is free, keyless, CORS-open and the
+   only source of injury designations, which are platform-neutral. It is also
+   allowed to fail — it never gates the Yahoo path below, which does not await
+   it and does not care whether it finished. */
 loadSleeperPlayers(false);
-if(S.draftId) connectDraft(S.draftId);
+/* Then ask whether we are being served by the local Yahoo server at all, and
+   only reconnect the room he was last in. Reconnecting BOTH would have two
+   pollers rebuilding S.taken from two different drafts every four seconds. */
+probeServer().then(ok=>{
+  // No server and a saved Yahoo league means he is on a copy of the app with
+  // no way to reach Yahoo — manual entry, no error, nothing to reconnect to.
+  if(ok && S.src==='yahoo' && S.yahooKey) connectYahoo(S.yahooKey);
+  else if(S.src!=='yahoo' && S.draftId) connectDraft(S.draftId);
+});
+/* Coming back from Yahoo's consent screen is a fresh page load, but coming
+   back from a background tab is not — re-probe so "Connect Yahoo" turns into
+   the league list without a manual reload. */
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && SRV.on && !SRV.connected) probeServer();
+});
 </script>
