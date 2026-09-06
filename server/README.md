@@ -344,7 +344,7 @@ server/
   yahoo.js            Yahoo client: OAuth, token refresh, defensive JSON parsing
   mock.js             offline fake draft
   mock-players.json   player names lifted from the app's own board
-  selftest.js         36 checks against Yahoo-shaped fixtures
+  selftest.js         46 checks against Yahoo-shaped fixtures
   .env.example        template for your keys
   .gitignore          keeps .env and data/ out of git
   start.bat           Windows: double-click to run live

@@ -86,8 +86,13 @@ const yahoo = new Yahoo({
 });
 
 const mock = MOCK ? new MockDraft({
-  teams: Number(opt('teams', 12)),
-  rounds: Number(opt('rounds', 16)),
+  // Default to the league this board is set up for, not a generic 12-team
+  // one. Connecting to a league adopts its team count and round count, so a
+  // rehearsal at 12/16 would leave every replacement level wrong for the
+  // real draft — and start-mock.bat passes no arguments when double-clicked,
+  // which is exactly how the rehearsal gets run.
+  teams: Number(opt('teams', 9)),
+  rounds: Number(opt('rounds', 14)),
   slot: Number(opt('slot', 7)),
   scoring: Number(opt('scoring', 1)),
   secondsPerPick: Number(opt('pick-seconds', 8)),
