@@ -68,7 +68,14 @@ const env = { ...loadEnv(path.join(HERE, '.env')), ...process.env };
 
 const MOCK = flag('mock');
 const PORT = Number(opt('port', env.PORT || 8000));
-const HOST = opt('host', env.HOST || '0.0.0.0');   // 0.0.0.0 so a phone on the LAN can reach it
+/* Loopback by default. This process holds a Yahoo client secret and a live
+   access token, and binding every interface hands anyone else on the network
+   — a shared office, hotel or coffee-shop wifi — your league data and your
+   /auth route. Nothing here echoes the secret or the token, so the exposure
+   is modest, but a default that is only safe on a network you happen to
+   trust is the wrong default. Phone access is one flag away: --lan. */
+const LAN = flag('lan');
+const HOST = opt('host', env.HOST || (LAN ? '0.0.0.0' : '127.0.0.1'));
 const REDIRECT_URI = env.YAHOO_REDIRECT_URI || `http://localhost:${PORT}/callback`;
 
 const yahoo = new Yahoo({
@@ -343,7 +350,12 @@ server.listen(PORT, HOST, () => {
   console.log(`  Draft Room server  ·  ${MOCK ? 'MOCK MODE (no Yahoo needed)' : 'live Yahoo'}`);
   console.log(bar);
   console.log(`  App:        http://localhost:${PORT}/`);
-  for (const ip of lanIps()) console.log(`  On phone:   http://${ip}:${PORT}/   (same wifi)`);
+  if (HOST === '127.0.0.1' || HOST === 'localhost') {
+    console.log(`  On phone:   add --lan to allow other devices on this wifi`);
+  } else {
+    for (const ip of lanIps()) console.log(`  On phone:   http://${ip}:${PORT}/   (same wifi)`);
+    console.log(`  Note:       reachable by anything on this network (--lan is on)`);
+  }
 
   if (MOCK) {
     console.log(`\n  Mock draft: ${mock.teams} teams · ${mock.rounds} rounds · you are slot ${mock.slot}`);

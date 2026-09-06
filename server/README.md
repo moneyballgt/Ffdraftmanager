@@ -136,17 +136,31 @@ restart. To force a fresh player list, visit
 
 ## Using it on your phone
 
-The server listens on your whole network, not just this PC. While it's running,
-the terminal prints something like:
+By default the server listens **only on this PC**, because it holds your Yahoo
+client secret and a live access token, and anything else on the same network
+could otherwise reach your league data and your sign-in route. On your own home
+wifi that hardly matters; on office, hotel or coffee-shop wifi it does.
+
+To let your phone reach it, start it with `--lan`:
+
+```
+node server.js --lan
+```
+
+It then prints something like:
 
 ```
 On phone:   http://192.168.1.42:8000/   (same wifi)
+Note:       reachable by anything on this network (--lan is on)
 ```
 
 Type that into your phone's browser and you get the same app, driven by the same
 live draft, as long as the phone is on the same wifi as the PC.
 
-Two caveats:
+Three caveats:
+
+- **`--lan` opens it to everyone on that network.** No password. Fine at home,
+  a bad idea on shared wifi.
 
 - **It's plain `http`, not `https`.** That's fine on a home network, but phone
   browsers only offer "Add to Home Screen" / offline install over `https` or on
