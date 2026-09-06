@@ -1,0 +1,13 @@
+{
+  "name": "draftroom-yahoo-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local same-origin server: serves the Draft Room app and proxies the Yahoo Fantasy API.",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "mock": "node server.js --mock"
+  },
+  "dependencies": {}
+}
