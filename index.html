@@ -65,6 +65,7 @@ main{padding:12px;max-width:760px;margin:0 auto}
 .pos{font-size:10px;font-weight:800;padding:3px 0;border-radius:5px;width:34px;text-align:center;flex:none;color:#0d1117}
 .pos.QB{background:var(--qb)}.pos.RB{background:var(--rb)}.pos.WR{background:var(--wr)}
 .pos.TE{background:var(--te)}.pos.K{background:var(--k)}.pos.DEF{background:var(--def)}
+.pos.FLEX{background:#93a7c4}
 .pmid{flex:1;min-width:0}
 .pn{display:block;font-weight:620;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pm{display:block;font-size:11.5px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
@@ -94,6 +95,23 @@ input:focus,select:focus{border-color:#4a5a75}
 .btn:active{opacity:.7}
 .row2{display:flex;gap:8px}.row2>*{flex:1}
 .hint{font-size:11.5px;color:var(--faint);line-height:1.5;margin-top:7px}
+.lnk{color:var(--go);font-weight:650;text-decoration:underline;font-size:inherit;padding:0}
+
+/* ---- roster editor ----
+   Two columns of steppers, not number inputs: on a phone a numeric keyboard
+   covers the very list you are trying to read while you change it. */
+.rosgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:6px}
+.rosrow{display:flex;align-items:center;gap:6px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:9px;padding:6px}
+.rosrow.off{opacity:.42}
+.rosrow .pos{width:36px}
+.rosn{flex:1;text-align:center;font-size:16px;font-weight:750;font-variant-numeric:tabular-nums}
+.stp{width:34px;height:34px;border-radius:8px;background:var(--panel);border:1px solid var(--line);
+  font-size:18px;font-weight:700;line-height:1;flex:none;color:var(--tx);text-align:center}
+.stp:active{opacity:.55}
+.replrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.replp{font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:6px;
+  background:var(--panel2);border:1px solid var(--line);color:var(--tx)}
 
 /* ---- nav ---- */
 nav{position:fixed;bottom:0;left:0;right:0;z-index:50;display:flex;
@@ -250,14 +268,21 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
     </div>
     <div class="card">
       <div class="lbl">League</div>
+      <div class="hint" id="cfgMigrated" hidden style="margin:0 0 10px"></div>
       <div class="row2">
-        <div><div class="hint" style="margin:0 0 5px">Teams</div><input id="cfgTeams" type="number" inputmode="numeric" value="12"></div>
-        <div><div class="hint" style="margin:0 0 5px">Your slot (1–12)</div><input id="cfgSlot" type="number" inputmode="numeric" placeholder="e.g. 7"></div>
+        <div><div class="hint" style="margin:0 0 5px">Teams</div><input id="cfgTeams" type="number" inputmode="numeric" min="2" max="20"></div>
+        <div><div class="hint" style="margin:0 0 5px" id="cfgSlotLbl">Your slot</div><input id="cfgSlot" type="number" inputmode="numeric" placeholder="e.g. 5"></div>
       </div>
+      <div class="hint" style="margin-top:12px">Starting lineup — set a position to <b>0</b> and it leaves the app entirely</div>
+      <div class="rosgrid" id="rosterEditor"></div>
       <div class="row2" style="margin-top:8px">
-        <div><div class="hint" style="margin:0 0 5px">Rounds</div><input id="cfgRounds" type="number" inputmode="numeric" value="16"></div>
-        <div><div class="hint" style="margin:0 0 5px">Scoring</div><select id="cfgScoring" disabled style="opacity:.55"><option>Full PPR (from the ranking source)</option></select></div>
+        <div><div class="hint" style="margin:0 0 5px">Bench</div><input id="cfgBench" type="number" inputmode="numeric" min="0" max="20"></div>
+        <div><div class="hint" style="margin:0 0 5px">Rounds</div><input id="cfgRounds" type="number" inputmode="numeric" min="1" max="40"></div>
       </div>
+      <div class="hint" id="cfgShape"></div>
+      <button class="btn" id="btnRoundsAuto" hidden style="width:100%;margin-top:8px">Rounds are set by hand — follow the roster instead</button>
+      <div class="hint" style="margin-top:12px">Scoring</div>
+      <select id="cfgScoring" disabled style="opacity:.55;margin-top:5px"><option>Full PPR (from the ranking source)</option></select>
       <div class="hint" style="margin-top:10px">Format</div>
       <select id="cfgMode" style="margin-top:5px">
         <option value="bestball">Best ball — auto lineup, ceiling wins</option>
@@ -278,18 +303,19 @@ nav .ic{display:block;font-size:17px;margin-bottom:2px;line-height:1}
         <option value="B">B — Weekly-starter (RB-heavy)</option>
         <option value="C">C — Roster-depth (RB/WR only)</option>
       </select>
-      <div class="hint" style="margin-top:2px">Which player counts as freely available. A builds
-      about 4 RB / 6 WR, B about 5.8 RB / 4.2 WR, C pushes TE and QB out of the early rounds.</div>
+      <div class="hint" style="margin-top:2px">Which player counts as freely available.
+      A is the number derived from your lineup, B counts weekly starters only and runs
+      RB-heavy, C counts everyone rostered and pushes TE and QB out of the early rounds.</div>
+      <div class="hint" id="cfgReplRanks" style="margin-top:9px"></div>
       <div class="hint" style="margin-top:12px">Boom influence — <b id="bbVal">20%</b></div>
       <input id="cfgSwing" type="range" min="0" max="60" step="5" value="20"
         style="width:100%;padding:0;margin-top:6px;accent-color:var(--go);background:none;border:none">
       <div class="hint" style="margin-top:2px">0% = pure expert consensus. Higher lets 2024-25 spike-week
       rates move players within their position. The data is backward-looking, so it says nothing about
       rookies and can misjudge anyone whose situation changed.</div>
-      <div class="hint" style="margin-top:10px">Starters: QB · RB · RB · WR · WR · TE · FLEX · FLEX · K · DEF<br>
-      Best ball rewards spike weeks, so boom rate and ceiling move the board, QB2 is a real
-      pick, and bench RB/WR keep value. Redraft ignores the boom layer and treats a backup
-      QB as dead weight.</div>
+      <div class="hint" style="margin-top:10px">Best ball rewards spike weeks, so boom rate and
+      ceiling move the board, QB2 is a real pick, and bench RB/WR keep value. Redraft ignores
+      the boom layer and treats a backup QB as dead weight.</div>
     </div>
     <div class="card">
       <div class="lbl">Seed with consensus rankings</div>
@@ -604,28 +630,123 @@ Harrison Butker|KC|K|123|249|5||||||||||||
 Keon Coleman|BUF|WR|63|250|7|12|8.5|8.3|8.3|25.2|6.0|13|8.6|0|18||
 `;
 
-/* ============================ CONFIG ============================ */
-const STARTERS = {QB:1, RB:2, WR:2, TE:1, FLEX:2, K:1, DEF:1};
+/* ======================= LEAGUE SHAPE =======================
+   The roster, the positions that exist, the round count and — most of all —
+   replacement level are DERIVED from S.roster / S.teams / S.bench. They used
+   to be module constants pinned to one 12-team, 2WR+2FLEX, K+DEF league, and
+   every number the app printed for any other league was wrong.
+
+   Derive, never retype. A hardcoded table has to be edited in five places to
+   change one league setting and the fifth is the one you forget: that is
+   exactly how kickers kept appearing in a league with no kicker. */
+
+/* Every position the baseline board and Sleeper's player file can contain.
+   This is the PARSING universe, not the league — the league's positions are
+   POS below, always a subset. */
+const POS_ALL = ['QB','RB','WR','TE','K','DEF'];
 const FLEXOK = ['RB','WR','TE'];
-const SLOTORDER = ['QB','RB','RB','WR','WR','TE','FLEX','FLEX','K','DEF'];
-/* replacement ranks for 12-team, 2WR + 2FLEX, full PPR */
-/* Replacement level differs by format. Best ball rosters ~2 QB and ~2-3 TE per
-   team, so the last startable player at those spots sits far deeper. */
-const REPL_REDRAFT  = {QB:13, RB:31, WR:38, TE:13, K:13, DEF:13};
-/* Only one QB and one TE start each week even in best ball, so their
-   replacement level barely moves; what changes is that more roster spots go
-   to RB/WR. Pushing the QB baseline deep inflates every quarterback's value
-   over replacement and buries the rest of the roster. */
-const REPL_BESTBALL = {QB:14, RB:33, WR:42, TE:15, K:13, DEF:13};
-/* Three defensible baselines. A tracks consensus and builds RB4/WR6; B counts
-   only weekly starters and builds RB5.8/WR4.2, thin for a 2WR+2FLEX PPR
-   lineup; C counts everyone rostered and pushes tight ends and quarterbacks
-   out of the early rounds entirely. */
-const REPL_SETS = {
-  A: {QB:14, RB:33, WR:42, TE:15, K:13, DEF:13},
-  B: {QB:12, RB:34, WR:35, TE:14, K:13, DEF:13},
-  C: {QB:26, RB:56, WR:76, TE:26, K:13, DEF:13}
+/* Slot render order: the lineup card reads the way a league site prints it. */
+const SLOT_ORDER = ['QB','RB','WR','TE','FLEX','K','DEF'];
+const DEFAULT_ROSTER = {QB:1, RB:2, WR:2, TE:1, FLEX:1, K:0, DEF:0};
+const DEFAULT_TEAMS = 9, DEFAULT_BENCH = 7;
+
+/* Recomputed by shape() — never assign these anywhere else.
+   POS  = positions this league actually rosters, in canonical order
+   VPOS = POS minus K/DEF, i.e. the positions worth valuing against each other
+   SLOTS = the starting lineup, one entry per slot ('RB','RB','FLEX',...) */
+let POS = [], VPOS = [], SLOTS = [];
+
+/* Normalise the league shape and rebuild everything derived from it.
+   Called on load, on every Setup change, and after Sleeper hands us the
+   league settings. Cheap, so it is always safe to call again. */
+function shape(){
+  const r = S.roster = Object.assign({}, DEFAULT_ROSTER, S.roster || {});
+  SLOT_ORDER.forEach(k=>{ r[k] = Math.max(0, Math.min(9, parseInt(r[k],10) || 0)); });
+  // a league with no positions at all would empty the board and strand him
+  // in a UI that renders nothing; one quarterback is the floor.
+  if(!SLOT_ORDER.some(k=>r[k]>0)) r.QB = 1;
+  S.teams = Math.max(2, Math.min(20, parseInt(S.teams,10) || DEFAULT_TEAMS));
+  S.bench = Math.max(0, Math.min(20, parseInt(S.bench,10) || 0));
+  // A flex spot makes RB/WR/TE real positions even at zero dedicated starters.
+  POS  = POS_ALL.filter(p => r[p] > 0 || (r.FLEX > 0 && FLEXOK.includes(p)));
+  VPOS = POS.filter(p => p !== 'K' && p !== 'DEF');
+  SLOTS = [];
+  SLOT_ORDER.forEach(k=>{ for(let i=0;i<r[k];i++) SLOTS.push(k); });
+  // Rounds follow the roster unless something set them by hand (or Sleeper
+  // told us the real number, which is authoritative over both).
+  if(S.roundsAuto !== false) S.rounds = SLOTS.length + S.bench;
+  S.rounds = Math.max(1, Math.min(40, parseInt(S.rounds,10) || 1));
+  if(S.slot != null && !(S.slot >= 1 && S.slot <= S.teams)) S.slot = null;
+}
+
+/* ---------------- REPLACEMENT LEVEL ----------------
+   Replacement is "the last player at this position that somebody is forced to
+   start" — the point where a position stops being scarce and VORP crosses
+   zero. That is arithmetic on the league, not a magic number:
+
+       repl[pos] = teams x starters[pos] + teams x FLEX x flexShare[pos]
+
+   Every team starts its dedicated slots at the position, plus that position's
+   share of the flex spots. Nothing else about a league changes the answer.
+
+   The old code carried this as three hardcoded tables (RB:33, WR:42, QB:14,
+   TE:15) measured off a 12-team, 2WR+2FLEX roster, and computeVorp() uses
+   them as the zero point for EVERY value in the app. In a 9-team, 1-flex
+   league the true baselines are about RB 22 and WR 23, so those tables were
+   handing elite backs and receivers ~40 points of value that does not exist
+   and mispricing the entire board underneath them. Deriving is not tidier —
+   it is the difference between right and wrong numbers.
+
+   The flex split is a full-PPR one: receivers take the most flex spots, backs
+   nearly as many, tight ends almost none. */
+const FLEX_SHARE = {RB:0.45, WR:0.50, TE:0.05};
+
+/* Best ball starts nobody by hand — the auto-lineup plays whichever of your
+   backs and receivers booms that week — so bench RB/WR are live roster spots
+   and the last USEFUL player at those positions sits deeper than the
+   weekly-starter count. Only one QB and one TE score for you in any week, so
+   those move barely at all.
+   Do NOT push the QB baseline deep. It is the classic mistake: it inflates
+   every quarterback's value over replacement and buries the rest of the
+   roster under a position you only ever start one of. */
+const BB_DEEPER = {QB:1.08, RB:1.12, WR:1.12, TE:1.12};
+
+/* The Setup switch, now MULTIPLIERS on the derived number rather than three
+   hardcoded 12-team tables. The ratios are the ones the old tables had, so
+   each option still means what its label says — at any league size:
+     A  consensus-tracking — the derived weekly-starter count, untouched
+     B  weekly-starter — shallower everywhere except running back
+     C  roster-depth — counts everyone rostered, not just weekly starters
+   Note this now applies in redraft too. It used to be silently best-ball-only
+   (redraft always got REPL_REDRAFT), so the control did nothing for half the
+   app's users. */
+const REPL_TUNE = {
+  A: {QB:1.00, RB:1.00, WR:1.00, TE:1.00},
+  B: {QB:0.86, RB:1.03, WR:0.83, TE:0.93},
+  C: {QB:1.85, RB:1.70, WR:1.80, TE:1.75}
 };
+
+/* Replacement RANK per position — an index into that position's board. */
+function replRanks(){
+  const r = S.roster, bb = S.mode === 'bestball';
+  const tune = REPL_TUNE[S.repl] || REPL_TUNE.A;
+  const out = {};
+  POS.forEach(pos=>{
+    let n = S.teams * (r[pos] || 0)
+          + S.teams * (r.FLEX || 0) * (FLEX_SHARE[pos] || 0);
+    n *= (tune[pos] || 1);
+    if(bb) n *= (BB_DEEPER[pos] || 1);
+    out[pos] = Math.max(1, Math.round(n));
+  });
+  return out;
+}
+
+/* A fresh {QB:0,RB:0,...} for whatever positions this league has. Hand-written
+   literals of that object were how K and DEF kept reappearing in roster
+   tallies after they had been switched off. */
+function zeroCounts(){ const c={}; POS.forEach(p=>c[p]=0); return c; }
+
+/* ============================ CONFIG ============================ */
 /* Boom-score weights, from the Inputs tab of the draft board workbook. */
 const W = {boom:0.45, ceil:0.25, ppg:0.30, cv:0.22};   // cv = best ball only
 const MIN_GM = 8;
@@ -634,11 +755,17 @@ const BB_SWING_DEFAULT = 0.20;  // how far a boom profile may move a player's va
 const VAL_FLOOR = 90;    // points below replacement still worth something
 const INJ_SPOTS = 7;     // positional spots to dock a player expected to miss time
 const SIGMA = 8;              // ADP noise, in picks
-const LS = 'draftroom.v2';
+const LS = 'draftroom.v3';
+const LS_V2 = 'draftroom.v2';
 
 /* ============================ STATE ============================ */
 let S = {
-  teams:12, rounds:16, slot:null, scoring:1, mode:'bestball', bbSwing:0.20, repl:'A', reach:'qbte',
+  /* Defaults are the league he actually drafts: 9 teams, one flex, no kicker,
+     no defense, 7 bench. Rounds are derived (7 starters + 7 bench = 14) and
+     stay derived until Sleeper or a hand edit pins them. */
+  teams:DEFAULT_TEAMS, roster:Object.assign({},DEFAULT_ROSTER), bench:DEFAULT_BENCH,
+  rounds:14, roundsAuto:true,
+  slot:null, scoring:1, mode:'bestball', bbSwing:0.20, repl:'A', reach:'qbte',
   taken:{},          // key -> 'me' | 'them'
   manual:[],         // hand-entered picks, preserved across sync rebuilds
   order:[],          // [{key,by,pick}] chronological
@@ -665,10 +792,36 @@ const norm = s => String(s).toLowerCase()
   .replace(/\s+(jr|sr|ii|iii|iv|v)\s*$/,'')
   .replace(/\s/g,'');
 
-/* ============================ PERSIST ============================ */
+/* ============================ PERSIST ============================
+   v3 is a deliberate key BUMP, not an in-place migration of v2.
+
+   v2 was written by a build whose league shape was hardcoded to 12 teams, 16
+   rounds, K and DEF. Its saved picks carry pick numbers and draft slots that
+   only mean anything under that shape: replayed into a 9-team league the
+   round/slot arithmetic silently reinterprets every one of them, and the app
+   looks correct while computing nonsense. So preferences and identity come
+   across, the league shape and the saved picks do not.
+
+   v2 is left in localStorage rather than deleted — it costs nothing and it is
+   the only copy of a draft in progress if this upgrade lands mid-draft. */
 function save(){ try{ localStorage.setItem(LS, JSON.stringify(S)); }catch(e){} }
+const V2_KEEP = ['slot','scoring','mode','bbSwing','repl','reach',
+                 'draftId','userId','sleeperSlot','ecr','awake'];
 function load(){
-  try{ const r = localStorage.getItem(LS); if(r) S = Object.assign(S, JSON.parse(r)); }catch(e){}
+  try{
+    const r = localStorage.getItem(LS);
+    if(r){ S = Object.assign(S, JSON.parse(r)); shape(); return; }
+  }catch(e){}
+  try{
+    const o = JSON.parse(localStorage.getItem(LS_V2) || 'null');
+    if(o){
+      V2_KEEP.forEach(k=>{ if(o[k] != null) S[k] = o[k]; });
+      S.migrated = true;   // say so once in Setup rather than changing his
+                           // league out from under him without a word
+    }
+  }catch(e){}
+  shape();
+  save();
 }
 
 /* ============================ PLAYERS ============================ */
@@ -685,6 +838,13 @@ function buildPlayers(){
     inj: r[16]||null, injBody: r[17]||null,
     idx: i
   }));
+  /* Positions the league does not roster are dropped HERE, at the one place
+     every downstream list is built from, instead of being filtered again in
+     each of the dozen places that render one. A kicker that never enters P
+     cannot leak onto the board, into a tier list, into roster needs or into a
+     recommendation — and no loop can throw on an unconfigured position,
+     because there are no players carrying one. */
+  P = P.filter(p => POS.includes(p.pos));
   P.forEach(p=>{
     // 2025 leads, 2024 informs; either alone is still usable
     const b25=p.boom25, b24=p.boom24;
@@ -696,7 +856,7 @@ function buildPlayers(){
     p.cv = (p.sd!=null && p.ppg) ? p.sd/Math.max(1,p.ppg) : 0;
     p.hasHistory = p.boomBlend!=null && p.ppg!=null;
   });
-  ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
+  POS.forEach(pos=>{
     P.filter(p=>p.pos===pos).sort((a,b)=>(a.ecr||999)-(b.ecr||999))
      .forEach((p,i)=> p.ecrPosRank = i+1);
   });
@@ -719,7 +879,7 @@ function buildPlayers(){
   // offline ADP proxy: VORP plus a positional bias, since the market takes
   // QBs and TEs earlier than raw value-over-replacement implies
   const BIAS = {QB:28, TE:12, RB:4, WR:0, K:-70, DEF:-70};
-  const overall = [...P].sort((a,b)=> (b.vorp+BIAS[b.pos]) - (a.vorp+BIAS[a.pos]));
+  const overall = [...P].sort((a,b)=> (b.vorp+(BIAS[b.pos]||0)) - (a.vorp+(BIAS[a.pos]||0)));
   overall.forEach((p,i)=> p.myRank = i+1);
   // the built-in board now carries real consensus ranks, so those are the market
   const ranked = P.filter(p=>p.mkt).sort((a,b)=>a.mkt-b.mkt);
@@ -744,7 +904,7 @@ function buildPlayers(){
    top-12 finish is a far easier bar at QB (32 starters) than at WR, so a
    cross-position boom score ranks backup quarterbacks above real players. */
 function computeBoom(){
-  ['QB','RB','WR','TE'].forEach(pos=>{
+  VPOS.forEach(pos=>{
     const list = P.filter(p=>p.pos===pos && p.hasHistory);
     if(list.length < 8){ list.forEach(p=>p.bb=0); return; }
     const z = f => {
@@ -809,7 +969,7 @@ function injFactor(d){
 function applyFormat(){
   const bb = S.mode==='bestball';
   const sw = S.bbSwing==null ? BB_SWING_DEFAULT : S.bbSwing;
-  ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
+  POS.forEach(pos=>{
     const list = P.filter(p=>p.pos===pos);
     if(!list.length) return;
     const curve = list.map(p=>p.base).sort((a,b)=>b-a);
@@ -832,17 +992,19 @@ function applyFormat(){
 }
 
 function computeVorp(){
-  const REPL = S.mode==='bestball' ? (REPL_SETS[S.repl] || REPL_BESTBALL) : REPL_REDRAFT;
+  const REPL = replRanks();
   const rep = {};
-  for(const pos in REPL){
+  POS.forEach(pos=>{
     const list = P.filter(p=>p.pos===pos).sort((a,b)=>b.proj-a.proj);
+    // a shallow league can want a baseline deeper than the board runs; the
+    // worst player on it is then the honest replacement
     const r = list[Math.min(REPL[pos], list.length)-1];
     rep[pos] = r ? r.proj : 0;
-  }
+  });
   P.forEach(p=> p.vorp = Math.round(p.proj - (rep[p.pos]||0)));
 }
 function computeTiers(){
-  ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
+  POS.forEach(pos=>{
     const list = P.filter(p=>p.pos===pos).sort((a,b)=>b.proj-a.proj);
     let t=1, top=list.length?list[0].proj:0;
     list.forEach((p,i)=>{
@@ -942,16 +1104,19 @@ function applyEcr(list){
   list.forEach(r=>{
     const guesses = r.pos==='DEF' ? ['def_'+r.team]
                   : r.pos ? [norm(r.name)+'_'+r.pos]
-                          : ['QB','RB','WR','TE','K','DEF'].map(x=>norm(r.name)+'_'+x);
+                          : POS.map(x=>norm(r.name)+'_'+x);
     let hit = guesses.map(k=>byKey[k]).find(Boolean);
     if(hit){ hit.ecr = r.rank; if(r.team) hit.team = r.team; matched++; return; }
     if(!r.pos){ skipped++; return; }                       // nothing to slot it into
+    // Most cheat sheets he can paste still list kickers and defenses. Adding
+    // them would put K/DEF back on a board that has none, through a side door.
+    if(!POS.includes(r.pos)){ skipped++; return; }
     const np = {key: r.pos==='DEF'?'def_'+r.team:norm(r.name)+'_'+r.pos, name:r.name, team:r.team||'FA',
                 pos:r.pos, base:0, proj:0, ecr:r.rank, added:true};
     P.push(np); byKey[np.key] = np; added++;
   });
   // 2. within each position, hand out the points curve in consensus order
-  ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
+  POS.forEach(pos=>{
     const ranked = P.filter(p=>p.pos===pos && p.ecr).sort((a,b)=>a.ecr-b.ecr);
     if(ranked.length < 3) return;
     const curve = curveFor(pos, ranked.length);
@@ -1014,7 +1179,7 @@ const TAU = 10;  // how tightly a team converges on the top man at a position;
    it when a league has a custom order. */
 function roomNeeds(){
   const R = {};
-  for(let s=1; s<=S.teams; s++) R[s] = {QB:0,RB:0,WR:0,TE:0,K:0,DEF:0,n:0,names:[]};
+  for(let s=1; s<=S.teams; s++) R[s] = Object.assign(zeroCounts(), {n:0, names:[]});
   S.order.forEach(o=>{
     const p = byKey[o.key]; if(!p) return;
     const s = o.slot || slotOnClock(o.pick);
@@ -1050,12 +1215,14 @@ function roomBias(){
   const sum = {}, cnt = {};
   S.order.forEach(o=>{
     const p = byKey[o.key];
+    // K and DEF never learn a reach bias: they go in the last two rounds
+    // whatever the room thinks, and their "market rank" is noise.
     if(!p || !p.mktRank || p.pos==='K' || p.pos==='DEF') return;
     sum[p.pos] = (sum[p.pos]||0) + (p.mktRank - o.pick);   // + = went early
     cnt[p.pos] = (cnt[p.pos]||0) + 1;
   });
   const out = {}, obs = {};
-  ['QB','RB','WR','TE'].forEach(pos=>{
+  VPOS.forEach(pos=>{
     const n = cnt[pos] || 0;
     if(!n){ out[pos] = prior[pos]; obs[pos] = null; return; }
     const reach = sum[pos]/n;
@@ -1064,24 +1231,33 @@ function roomBias(){
     const w = n/(n + REACH_N);                     // trust evidence gradually
     out[pos] = prior[pos]*(1-w) + measured*w;
   });
-  out.K = 1; out.DEF = 1;
+  POS.forEach(pos=>{ if(out[pos] == null) out[pos] = 1; });   // K/DEF, if rostered
   out._obs = obs; out._n = cnt;
   return out;
 }
 
 /* What a team with this roster is shopping for. */
 function teamAppetite(c, roundsLeft, bias){
-  const bb = S.mode === 'bestball';
+  const bb = S.mode === 'bestball', r = S.roster;
   const w = {};
-  ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
+  /* Only over POS, so in a league without them the K/DEF branch — which
+     forces urgency in the last two rounds — can never fire. It used to run
+     unconditionally and had every team in the room hunting a kicker that
+     does not exist in round 13. */
+  POS.forEach(pos=>{
+    const need = r[pos] || 0;
     let v;
-    if(pos==='K' || pos==='DEF')  v = c[pos] >= 1 ? 0 : (roundsLeft <= 2 ? 4 : 0.02);
-    else if(pos==='QB')           v = c.QB===0 ? (roundsLeft<=4 ? 3 : 1) : (bb && c.QB===1 ? 0.5 : 0.05);
-    else if(pos==='TE')           v = c.TE===0 ? (roundsLeft<=4 ? 3 : 1) : (bb && c.TE===1 ? 0.35 : 0.05);
-    else {
-      const start = STARTERS[pos];
-      v = c[pos] < start ? 1.0 : (c[pos] < start + 2 ? 0.7 : 0.35);
-    }
+    if(pos==='K' || pos==='DEF')
+      v = c[pos] >= need ? 0 : (roundsLeft <= 2 ? 4 : 0.02);
+    /* QB and TE are the one-of positions: a team wants exactly its starters
+       and then stops, except in best ball where the auto-lineup makes a
+       second one a real asset. Written against need rather than a literal 1
+       so a superflex league behaves. */
+    else if(pos==='QB' || pos==='TE')
+      v = c[pos] < need ? (roundsLeft<=4 ? 3 : 1)
+        : (bb && c[pos] < need+1 ? (pos==='QB' ? 0.5 : 0.35) : 0.05);
+    else
+      v = c[pos] < need ? 1.0 : (c[pos] < need + 2 ? 0.7 : 0.35);
     w[pos] = v * ((bias && bias[pos]) || 1);
   });
   return w;
@@ -1115,7 +1291,7 @@ function buildRoom(atPick){
   const steps = [];
   for(let k = now; k < atPick; k++){
     const s = slotOnClock(k);
-    const c = R[s] || {QB:0,RB:0,WR:0,TE:0,K:0,DEF:0,n:0};
+    const c = R[s] || Object.assign(zeroCounts(), {n:0});
     const raw = teamAppetite(c, S.rounds - c.n, bias);
     let tot = 0;
     for(const pos in raw) if(byPos[pos] && byPos[pos].length) tot += raw[pos];
@@ -1159,7 +1335,7 @@ function available(){ return P.filter(p=>!S.taken[p.key]); }
 function fillLineup(){
   const mine = myPlayers().slice().sort((a,b)=>b.proj-a.proj);
   const used = new Set();
-  const lineup = SLOTORDER.map(slot=>{
+  const lineup = SLOTS.map(slot=>{
     const cand = mine.find(p=>!used.has(p.key) &&
       (slot==='FLEX' ? FLEXOK.includes(p.pos) : p.pos===slot));
     if(cand) used.add(cand.key);
@@ -1169,42 +1345,52 @@ function fillLineup(){
   return {lineup, bench};
 }
 function counts(){
-  const c={QB:0,RB:0,WR:0,TE:0,K:0,DEF:0};
-  myPlayers().forEach(p=>c[p.pos]++);
+  const c = zeroCounts();
+  myPlayers().forEach(p=>{ if(c[p.pos]!=null) c[p.pos]++; });
   return c;
 }
 function flexOpen(){
-  const c = counts();
-  const surplus = Math.max(0,c.RB-STARTERS.RB) + Math.max(0,c.WR-STARTERS.WR) + Math.max(0,c.TE-STARTERS.TE);
-  return Math.max(0, STARTERS.FLEX - surplus);
+  const c = counts(), r = S.roster;
+  const surplus = FLEXOK.reduce((n,pos)=> n + Math.max(0, (c[pos]||0) - (r[pos]||0)), 0);
+  return Math.max(0, (r.FLEX||0) - surplus);
 }
 
-const CAP_REDRAFT  = {QB:2, TE:2, K:1, DEF:1, RB:7, WR:8};
-const CAP_BESTBALL = {QB:2, TE:2, K:1, DEF:1, RB:8, WR:9};
+/* Per-position ceilings — "never recommend a ninth receiver", not targets.
+   Derived, because a hardcoded RB:7 is meaningless on a 14-man roster and
+   binding on a 20-man one. Skill positions get their starters plus the flex
+   plus a depth allowance, capped so no single position can eat the roster;
+   best ball banks more spike weeks off depth, so it gets one more. */
+function caps(){
+  const r = S.roster, bb = S.mode==='bestball', size = SLOTS.length + S.bench;
+  const out = {};
+  POS.forEach(pos=>{
+    if(pos==='K' || pos==='DEF')      out[pos] = r[pos] || 1;
+    else if(pos==='QB'||pos==='TE')   out[pos] = (r[pos] || 0) + 1;
+    else out[pos] = Math.max(1, Math.min(size - 2, (r[pos]||0) + (r.FLEX||0) + (bb?6:5)));
+  });
+  return out;
+}
 
 /* how many required lineup spots are still empty */
 function unfilledRequired(){
-  const c = counts();
+  const c = counts(), r = S.roster;
   let n = 0;
-  for(const pos in STARTERS){
-    if(pos==='FLEX') continue;
-    n += Math.max(0, STARTERS[pos] - c[pos]);
-  }
+  POS.forEach(pos=>{ n += Math.max(0, (r[pos]||0) - c[pos]); });
   return n + flexOpen();
 }
 function isRequired(pos){
-  const c = counts();
-  if(pos==='K' || pos==='DEF') return c[pos] < STARTERS[pos];
-  if(c[pos] < STARTERS[pos]) return true;
+  const c = counts(), r = S.roster;
+  if(pos==='K' || pos==='DEF') return c[pos] < (r[pos]||0);
+  if(c[pos] < (r[pos]||0)) return true;
   return FLEXOK.includes(pos) && flexOpen() > 0;
 }
 
 /* 0 means "never draft him right now" */
 function needMult(pos){
-  const c = counts();
+  const c = counts(), r = S.roster;
   const bb = S.mode==='bestball';
-  const CAP = bb ? CAP_BESTBALL : CAP_REDRAFT;
-  if(c[pos] >= CAP[pos]) return 0;
+  const CAP = caps();
+  if(CAP[pos]!=null && c[pos] >= CAP[pos]) return 0;
   // 99 here meant the K/DEF branch (picksLeft<=2) could never fire, so with no
   // draft slot set the tool finished every draft with both slots empty.
   const picksLeft = S.slot ? myPickNumbers().filter(x=>x>=pickNo()).length
@@ -1220,11 +1406,14 @@ function needMult(pos){
   // ball the auto-lineup takes whichever quarterback booms that week, so QB2
   // is a genuine roster spot; in redraft he rots on your bench while you
   // stream the position off waivers.
-  if(pos==='QB' && c.QB >= 1)
-    return bb ? (c.QB===1 ? 0.80 : 0.15)
+  // Math.max(1,...) because a TE-eligible flex can make TE a real position
+  // with zero dedicated slots; the FIRST one is still worth having.
+  const qn = Math.max(1, r.QB||0), tn = Math.max(1, r.TE||0);
+  if(pos==='QB' && c.QB >= qn)
+    return bb ? (c.QB === qn ? 0.80 : 0.15)
               : (picksLeft <= 2 ? 0.30 : 0);   // redraft: stream QB, don't roster one
-  if(pos==='TE' && c.TE >= 1)
-    return bb ? (c.TE===1 ? 0.50 : 0.14)
+  if(pos==='TE' && c.TE >= tn)
+    return bb ? (c.TE === tn ? 0.50 : 0.14)
               : (picksLeft <= 3 ? 0.30 : 0.05);
   // running out of room: force the empty starting spots
   if(isRequired(pos)){
@@ -1237,10 +1426,10 @@ function needMult(pos){
     if(startable <= 7 && slack <= 6) return 1.9;
   }
   if(pos==='QB' || pos==='TE') return 1.0;
-  if(c[pos] < STARTERS[pos]) return 1.0;
+  if(c[pos] < (r[pos]||0)) return 1.0;
   if(flexOpen() > 0) return 0.92;
   // best ball banks spike weeks from depth, so bench RB/WR keep real value
-  const depth = c[pos] - STARTERS[pos];
+  const depth = c[pos] - (r[pos]||0);
   return bb ? (depth <= 3 ? 0.72 : 0.5) : (depth <= 2 ? 0.6 : 0.32);
 }
 
@@ -1319,10 +1508,10 @@ function scoreBoard(){
 function reasonFor(e){
   const p=e.p, bits=[];
   const c=counts(), nxt=pickAfterNext();
-  if(e.need>=0.99 && ['RB','WR','QB','TE'].includes(p.pos)){
-    const have=c[p.pos], want=STARTERS[p.pos];
+  if(e.need>=0.99 && VPOS.includes(p.pos)){
+    const have=c[p.pos], want=S.roster[p.pos]||0;
     bits.push(have<want ? `you still need <b>${want-have} starting ${p.pos}</b>` : `fills a <b>starting ${p.pos}</b> spot`);
-  } else if(p.pos==='K' || p.pos==='DEF'){
+  } else if(p.pos==='K' || p.pos==='DEF'){   // only reachable if the league starts one
     bits.push(`last rounds — you still need a <b>${p.pos==='K'?'kicker':'defense'}</b>`);
   } else if(e.need>=0.9){ bits.push('fills a <b>FLEX</b> spot'); }
   else if(e.need>=0.5){ bits.push('useful depth'); }
@@ -1405,7 +1594,10 @@ async function loadSleeperPlayers(force){
       const q=all[id];
       if(!q.position) continue;
       const pos = q.position==='DEF' ? 'DEF' : q.position;
-      if(!['QB','RB','WR','TE','K','DEF'].includes(pos)) continue;
+      // POS_ALL, not POS: this 5 MB download is cached for six hours and
+      // reused across league-shape changes, so it holds every position the
+      // file has. buildPlayers() decides which of them the league rosters.
+      if(!POS_ALL.includes(pos)) continue;
       const nm = pos==='DEF' ? (q.first_name||q.last_name||id) : (q.full_name || `${q.first_name||''} ${q.last_name||''}`);
       const mk = pos==='DEF' ? 'def_'+(q.team||id) : norm(nm)+'_'+pos;
       m[mk] = {team:q.team||'FA', rank:q.search_rank||null, injury:q.injury_status||null};
@@ -1448,6 +1640,33 @@ async function findLeagues(){
   }catch(e){ msg.textContent='Lookup failed — check the username, or paste the draft ID instead.'; }
 }
 
+/* Sleeper's league object carries the actual starting lineup. Taking it is
+   the difference between the app being right for his league and being right
+   for the league he remembered to type in. Deliberately authoritative: it
+   overwrites a hand-set roster, because Sleeper is the league.
+   Only tokens we understand are counted, and the result is ignored unless it
+   looks like a real lineup — a half-parsed roster is worse than none. */
+const SLEEPER_SLOT = {QB:'QB', RB:'RB', WR:'WR', TE:'TE',
+  FLEX:'FLEX', WRRB_FLEX:'FLEX', REC_FLEX:'FLEX', WRT:'FLEX', WRRB_WRT:'FLEX',
+  SUPER_FLEX:'QB',   // in practice a second quarterback, and the flex model
+                     // here only knows RB/WR/TE — call it what it plays as
+  K:'K', DEF:'DEF', DST:'DEF'};
+function adoptRosterPositions(list){
+  if(!Array.isArray(list) || !list.length) return;
+  const r = {QB:0, RB:0, WR:0, TE:0, FLEX:0, K:0, DEF:0};
+  let bench = 0, unknown = 0;
+  list.forEach(raw=>{
+    const t = String(raw).toUpperCase();
+    if(t==='BN'){ bench++; return; }
+    if(t==='IR' || t==='TAXI') return;        // not draftable roster spots
+    const slot = SLEEPER_SLOT[t];
+    if(slot) r[slot]++; else unknown++;       // IDP, and anything new
+  });
+  if(!r.QB && !r.RB && !r.WR) return;         // not a lineup we understand
+  if(unknown > 2) return;                     // IDP or some format we do not model
+  S.roster = r; S.bench = bench;
+}
+
 async function connectDraft(id){
   id = String(id).trim().replace(/\/+$/,'').split('/').pop().split('?')[0];
   S.draftId = id; save();
@@ -1455,11 +1674,13 @@ async function connectDraft(id){
   try{
     const d = await j('draft/'+id);
     S.teams  = d.settings.teams  || S.teams;
-    S.rounds = d.settings.rounds || S.rounds;
+    // Sleeper knows the real round count; stop deriving it from here on.
+    if(d.settings.rounds){ S.rounds = d.settings.rounds; S.roundsAuto = false; }
     if(d.draft_order && S.userId && d.draft_order[S.userId]) S.slot = d.draft_order[S.userId];
     if(d.league_id){
       try{
         const lg = await j('league/'+d.league_id);
+        adoptRosterPositions(lg.roster_positions);
         const rec = lg.scoring_settings && lg.scoring_settings.rec;
         if(rec!=null){
           S.scoring = rec;
@@ -1468,9 +1689,7 @@ async function connectDraft(id){
         }
       }catch(e){}
     }
-    $('#cfgTeams').value=S.teams; $('#cfgRounds').value=S.rounds;
-    if(S.slot) $('#cfgSlot').value=S.slot;
-    save(); buildPlayers();
+    shape(); save(); buildPlayers();     // startPoll() below repaints
     $('#syncMsg').textContent = `Connected · ${S.teams} teams · ${S.rounds} rounds${S.slot?` · you are slot ${S.slot}`:''} · picks will load automatically.`;
     startPoll();
   }catch(e){ $('#syncMsg').textContent = 'Could not connect to that draft ID.'; }
@@ -1549,7 +1768,10 @@ function renderPick(){
   const run = runAlert();
   if(run) A.innerHTML += `<div class="runbox">⚠︎ ${run}</div>`;
   const c=counts(), rl = S.slot?myPickNumbers().filter(x=>x>=pickNo()).length:99;
-  if(rl<=2 && (!c.K||!c.DEF)) A.innerHTML += `<div class="warnbox">Last picks — you still need ${!c.K?'a K':''}${!c.K&&!c.DEF?' and ':''}${!c.DEF?'a DEF':''}.</div>`;
+  // only when the league actually starts them — this used to nag for a
+  // kicker and a defense in every league on earth
+  const lateGaps = ['K','DEF'].filter(pos=> POS.includes(pos) && c[pos] < S.roster[pos]);
+  if(rl<=2 && lateGaps.length) A.innerHTML += `<div class="warnbox">Last picks — you still need ${lateGaps.map(x=>(x==='K'?'a K':'a DEF')).join(' and ')}.</div>`;
   if(!S.slot) A.innerHTML += `<div class="warnbox">Set your draft slot in <b>Setup</b> so timing advice works.</div>`;
   if(S.scoringWarn) A.innerHTML += `<div class="warnbox">${esc(S.scoringWarn)}</div>`;
 
@@ -1607,13 +1829,17 @@ function renderBoard(force){
     boardDirty = true; $('#boardPill').hidden = false; return;
   }
   boardDirty = false; $('#boardPill').hidden = true;
+  // switching a position off in Setup can leave the filter pointing at a chip
+  // that no longer exists, which would render an empty board with no way back
+  if(posFilter!=='ALL' && !POS.includes(posFilter)) posFilter = 'ALL';
   const q = norm($('#search').value);
-  const chips = ['ALL','QB','RB','WR','TE','K','DEF'];
+  const chips = ['ALL'].concat(POS);
   $('#posChips').innerHTML = chips.map(c=>`<button class="chip ${posFilter===c?'on':''}" data-p="${c}">${c}</button>`).join('');
   let list = available();
   // K and DEF have no meaningful cross-position value: the pool is 14 and 16
   // deep, so "replacement" is whoever happened to be typed in last and a
-  // kicker floats above 180 real players. They stay on their own filters.
+  // kicker floats above 180 real players. They stay on their own filters —
+  // in a league that starts none they are not in P at all.
   if(posFilter==='ALL') list = list.filter(p=>p.pos!=='K' && p.pos!=='DEF');
   else list = list.filter(p=>p.pos===posFilter);
   if(q) list = P.filter(p=>norm(p.name).includes(q));
@@ -1634,11 +1860,11 @@ function renderRoster(){
       <span class="slotn">${s.slot}</span>
       <span class="slotp ${s.p?'':'empty'}">${s.p?esc(s.p.name)+' · '+s.p.team:'—'}</span>
       <span class="ps">${s.p?s.p.proj:''}</span></div>`).join('');
-  const c=counts();
-  $('#needPills').innerHTML = ['QB','RB','WR','TE','K','DEF'].map(pos=>{
-    const ok = c[pos]>=STARTERS[pos];
-    return `<span class="needp ${ok?'ok':'gap'}">${pos} ${c[pos]}/${STARTERS[pos]}</span>`;
-  }).join('') + `<span class="needp ${flexOpen()?'gap':'ok'}">FLEX ${STARTERS.FLEX-flexOpen()}/${STARTERS.FLEX}</span>`;
+  const c=counts(), r=S.roster;
+  $('#needPills').innerHTML = POS.filter(pos=>r[pos]>0).map(pos=>{
+    const ok = c[pos]>=r[pos];
+    return `<span class="needp ${ok?'ok':'gap'}">${pos} ${c[pos]}/${r[pos]}</span>`;
+  }).join('') + (r.FLEX ? `<span class="needp ${flexOpen()?'gap':'ok'}">FLEX ${r.FLEX-flexOpen()}/${r.FLEX}</span>` : '');
   $('#bench').innerHTML = bench.map(p=>playerRow(p)).join('') || `<div class="empty">Bench is empty.</div>`;
 
   // stacked bye weeks among starters
@@ -1651,7 +1877,7 @@ function renderRoster(){
     : '';
 
   const av = available();
-  $('#scarcity').innerHTML = ['QB','RB','WR','TE'].map(pos=>{
+  $('#scarcity').innerHTML = VPOS.map(pos=>{
     const good = av.filter(p=>p.pos===pos && p.vorp>0).length;
     const t1   = av.filter(p=>p.pos===pos && p.tier<=2).length;
     return `<div class="slot"><span class="pos ${pos}">${pos}</span>
@@ -1663,15 +1889,15 @@ function renderRoom(){
   const R = roomNeeds(), nxt = nextMyPick(), after = pickAfterNext();
   const line = (s2,c,tag)=>{
     const gaps = [];
-    ['QB','RB','WR','TE'].forEach(pos=>{
-      const short = (STARTERS[pos]||0) - c[pos];
+    VPOS.forEach(pos=>{
+      const short = (S.roster[pos]||0) - c[pos];
       if(short > 0) gaps.push(`${short} ${pos}`);
     });
     return `<div class="slot" style="${s2===S.slot?'background:#13251c;':''}">
       <span class="slotn">${s2===S.slot?'YOU':'#'+s2}</span>
       <span class="slotp" style="font-weight:400;font-size:13px">
         <b style="font-weight:700">${c.n}</b> picks ·
-        QB${c.QB} RB${c.RB} WR${c.WR} TE${c.TE}${c.K?' K':''}${c.DEF?' D':''}
+        ${VPOS.map(p=>p+c[p]).join(' ')}${c.K?' K':''}${c.DEF?' D':''}
         ${gaps.length?`<span style="color:var(--warn)"> · needs ${gaps.join(', ')}</span>`
                      :'<span style="color:var(--go)"> · starters full</span>'}
       </span>${tag||''}</div>`;
@@ -1681,12 +1907,12 @@ function renderRoom(){
     for(let k = Math.max(pickNo(), nxt+1); k < after; k++) between.push({k, s:slotOnClock(k)});
   }
   $('#roomNext').innerHTML = between.length
-    ? between.map(x=>line(x.s, R[x.s]||{QB:0,RB:0,WR:0,TE:0,K:0,DEF:0,n:0},
+    ? between.map(x=>line(x.s, R[x.s]||Object.assign(zeroCounts(),{n:0}),
         `<span class="ps">${fmtPick(x.k)}</span>`)).join('')
       + `<div class="hint">These are the teams that decide whether a player comes back to you. Their needs drive every survival figure in the app.</div>`
     : `<div class="empty">Set your draft slot to see who picks before your next turn.</div>`;
   const bias = roomBias();
-  const rows = ['QB','RB','WR','TE'].map(pos=>{
+  const rows = VPOS.map(pos=>{
     const o = bias._obs[pos], n = bias._n[pos]||0;
     const txt = n < 3 ? 'not enough picks yet'
       : o > 2  ? `going <b>${o.toFixed(0)} picks early</b>`
@@ -1704,7 +1930,81 @@ function renderRoom(){
     .map(s2=>line(s2, R[s2])).join('');
 }
 
+/* ============================ SETUP ============================
+   The roster editor renders FROM state, never from its own DOM, so a hand
+   edit and the settings Sleeper hands back can never disagree on screen.
+   render() is its only caller, so there is exactly one place the League card
+   is repainted no matter what changed the league. */
+let _setupHTML = {};
+function renderSetup(){
+  const r = S.roster, derived = SLOTS.length + S.bench;
+  // A Sleeper poll re-renders every 4s. Writing .value into the box he is
+  // typing in would eat the digit he just pressed, so leave the focused
+  // field alone and let its own onchange be the source of truth.
+  const setVal = (sel,v)=>{ const el=$(sel); if(el && el!==document.activeElement) el.value=v; };
+  /* Only write innerHTML when it actually changed, against our own cache
+     rather than el.innerHTML (the browser normalises what it hands back, so
+     that comparison never matches and rewrites every time).
+
+     This is not a speed tweak. Pressing a stepper BLURS whichever number box
+     he typed in last, the blur fires the input's native change, that change
+     re-renders, and the button he is pressing is destroyed between mousedown
+     and mouseup — so no click event is ever produced and his first tap does
+     nothing. Leaving unchanged nodes alone keeps the tap alive. */
+  const setHTML = (sel,html)=>{ if(_setupHTML[sel]===html) return;
+                                _setupHTML[sel]=html; const el=$(sel); if(el) el.innerHTML=html; };
+  setHTML('#rosterEditor', SLOT_ORDER.map(pos=>
+    `<div class="rosrow ${r[pos]?'':'off'}">
+       <span class="pos ${pos}">${pos}</span>
+       <button class="stp" data-ros="${pos}" data-d="-1" aria-label="one fewer ${pos}">&minus;</button>
+       <span class="rosn mono">${r[pos]}</span>
+       <button class="stp" data-ros="${pos}" data-d="1" aria-label="one more ${pos}">+</button>
+     </div>`).join(''));
+  setVal('#cfgTeams',  S.teams);
+  setVal('#cfgBench',  S.bench);
+  setVal('#cfgRounds', S.rounds);
+  setVal('#cfgSlot',   S.slot || '');
+  $('#cfgSlotLbl').textContent = `Your slot (1–${S.teams})`;
+  const off = POS_ALL.filter(p=>!POS.includes(p));
+  setHTML('#cfgShape',
+    `<b style="color:var(--dim)">${SLOTS.join(' · ') || 'no starters'}</b><br>`
+    + `${S.teams} teams · ${SLOTS.length} starters + ${S.bench} bench = `
+    + `<b>${derived} round${derived===1?'':'s'}</b>`
+    + (S.rounds !== derived ? `, <b style="color:var(--warn)">but drafting ${S.rounds}</b>` : '')
+    + ` · ${totalPicks()} picks`
+    + (off.length ? `<br>Off the board entirely: <b>${off.join(', ')}</b>.` : ''));
+  $('#btnRoundsAuto').hidden = (S.rounds === derived);
+  /* The derived replacement ranks, printed where he can sanity-check them.
+     Every "+N over replacement" in the app is measured from these, so if the
+     league shape is wrong this line is where it shows up first. */
+  const rr = replRanks();
+  setHTML('#cfgReplRanks',
+    `<b>Replacement level</b> — the last player nobody has to compete for:`
+    + `<div class="replrow">${VPOS.map(p=>`<span class="replp">${p}<span class="mono">${rr[p]}</span></span>`).join('')}</div>`
+    + `${S.teams} teams × this lineup`
+    + (S.roster.FLEX ? `, flex split 45% RB / 50% WR / 5% TE` : '')
+    + (S.repl!=='A' ? `, baseline ${S.repl}` : '')
+    + (S.mode==='bestball' ? `, pushed deeper for best ball` : '') + `.`);
+  $('#cfgMigrated').hidden = !S.migrated;
+  if(S.migrated) setHTML('#cfgMigrated', `<span style="color:var(--warn)">Settings carried over
+    from an earlier version.</span> That version hardcoded a 12-team, 16-round roster with a K
+    and a DEF, so its league shape and any saved picks were left behind rather than
+    reinterpreted into this one. Check the lineup below.
+    <button class="lnk" id="btnMigOk">Got it</button>`);
+}
+
+/* Any league-shape change reruns the whole pipeline: positions appear or
+   vanish, which changes who is even in P, and replacement level moves, which
+   changes every VORP in the app. 300 players — just redo all of it. */
+function applyShape(){ shape(); save(); buildPlayers(); render(); }
+
 function render(){
+  /* Setup is repainted on every render, not only while he is looking at it:
+     Sleeper can change the league from under whatever tab he is on, and it
+     has to be right when he gets there. Drawn ahead of the "no players"
+     guard too, so a league shape that empties the board still leaves him the
+     one screen that can fix it. */
+  renderSetup();
   if(!P.length) return;
   renderHeader();
   if(sheetKey && $('#sheet').classList.contains('on')) fillSheet(sheetKey);
@@ -1754,8 +2054,17 @@ document.addEventListener('click', e=>{
     view = nav.dataset.v;
     document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b===nav));
     ['Pick','Board','Roster','Room','Setup'].forEach(v=> $('#v'+v).hidden = v!==view);
-    render(); window.scrollTo(0,0); return;
+    /* Scroll BEFORE rendering. renderBoard() holds its redraw when the page is
+       scrolled, so that a list does not re-sort under a moving thumb — but on
+       a tab switch the scroll position is discarded on the next line anyway,
+       and reading it first left the board showing a stale list (with the wrong
+       position chips) behind the refresh pill after any Setup change. */
+    window.scrollTo(0,0); render(); return;
   }
+  const stp = e.target.closest('.stp');
+  if(stp){ bumpRoster(stp.dataset.ros, +stp.dataset.d); return; }
+  if(e.target.id === 'btnRoundsAuto'){ S.roundsAuto = true; applyShape(); return; }
+  if(e.target.id === 'btnMigOk'){ delete S.migrated; save(); renderSetup(); return; }
   const chip = e.target.closest('.chip');
   if(chip){ posFilter = chip.dataset.p; renderBoard(); return; }
   const row = e.target.closest('.prow,.alt');
@@ -1796,18 +2105,32 @@ $('#btnReset').onclick = ()=>{
   if(!confirm('Wipe all picks and start over?')) return;
   S.taken={}; S.order=[]; save(); render();
 };
-['cfgTeams','cfgRounds','cfgSlot'].forEach(id=>{
-  $('#'+id).onchange = e=>{
-    const v = parseInt(e.target.value,10);
-    if(id==='cfgTeams') S.teams=v||12;
-    if(id==='cfgRounds') S.rounds=v||16;
-    if(id==='cfgSlot') S.slot = (v>=1&&v<=S.teams)?v:null;
-    save(); render();
-  };
-});
+/* One stepper tap changes the league. shape() re-derives the positions, the
+   slot order, the round count and replacement level; applyShape() then
+   rebuilds the player pool off them, because a position going to 0 removes
+   its players from P entirely. */
+function bumpRoster(pos, d){
+  S.roster[pos] = Math.max(0, Math.min(9, (S.roster[pos]||0) + d));
+  applyShape();
+}
+$('#cfgTeams').onchange = e=>{ S.teams = parseInt(e.target.value,10) || S.teams; applyShape(); };
+$('#cfgBench').onchange = e=>{ const v = parseInt(e.target.value,10); S.bench = isNaN(v)?0:v; applyShape(); };
+$('#cfgRounds').onchange = e=>{
+  const v = parseInt(e.target.value,10);
+  if(!v){ renderSetup(); return; }                 // blank means "leave it alone"
+  // typing a number by hand pins it: the roster stops driving rounds until
+  // he taps "follow the roster", or Sleeper tells us the real count
+  S.roundsAuto = false; S.rounds = v; applyShape();
+};
+$('#cfgSlot').onchange = e=>{
+  const v = parseInt(e.target.value,10);
+  S.slot = (v>=1 && v<=S.teams) ? v : null;
+  save(); render();
+};
 // Scoring is a property of the pasted ranking source, not a knob.
-$('#cfgMode').onchange = e=>{ S.mode=e.target.value; save(); buildPlayers(); render(); };
-$('#cfgRepl').onchange = e=>{ S.repl=e.target.value; save(); buildPlayers(); render(); };
+// Mode and baseline both move replacement level, so they go through applyShape.
+$('#cfgMode').onchange = e=>{ S.mode=e.target.value; applyShape(); };
+$('#cfgRepl').onchange = e=>{ S.repl=e.target.value; applyShape(); };
 $('#cfgReach').onchange = e=>{ S.reach=e.target.value; save(); render(); };
 $('#cfgSwing').oninput = e=>{
   S.bbSwing = +e.target.value/100; $('#bbVal').textContent = e.target.value+'%';
@@ -1860,8 +2183,7 @@ window.addEventListener('offline', ()=>renderHeader());
 
 /* ============================ INIT ============================ */
 load();
-$('#cfgTeams').value=S.teams; $('#cfgRounds').value=S.rounds;
-$('#cfgSlot').value=S.slot||''; $('#cfgScoring').value=String(S.scoring);
+// every League field is drawn by renderSetup(), which render() calls
 $('#cfgMode').value=S.mode;
 $('#cfgRepl').value=S.repl||'A';
 $('#cfgReach').value=S.reach||'qbte';
