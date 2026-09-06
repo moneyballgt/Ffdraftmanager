@@ -24,10 +24,11 @@ Then open <http://localhost:8000>.
 
 On Windows you can instead double-click **`start-mock.bat`**.
 
-Mock mode runs a fake 12-team, 16-round snake draft where **a new pick lands
-every 8 seconds**. It uses real player names taken from the app's own board, so
-everything joins up properly. This is how you test the app tonight without
-waiting for a live draft.
+Mock mode runs a fake **9-team, 14-round** snake draft — your league's shape,
+so a rehearsal leaves the board configured the way you actually draft — where
+**a new pick lands every 8 seconds**. It uses real player names taken from the
+app's own board, so everything joins up properly. This is how you test the app
+tonight without waiting for a live draft.
 
 Useful knobs:
 
